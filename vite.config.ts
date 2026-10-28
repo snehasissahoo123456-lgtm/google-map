@@ -1,0 +1,24 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+*/
+/* tslint:disable */
+import react from '@vitejs/plugin-react';
+import path from 'path';
+import {defineConfig} from 'vite';
+
+export default defineConfig({
+  server: {
+    port: 3000,
+    host: '0.0.0.0',
+  },
+  plugins: [react()],
+  define: {
+    'globalThis.process.env.GEMINI_API_KEY': JSON.stringify('server-side'),
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
+    },
+  },
+});
