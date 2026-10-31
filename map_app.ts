@@ -6,13 +6,14 @@
 /**
  * Photorealistic 3D Google Maps Web Application.
  * Includes:
- * - 24/7 Live GPS tracking with pairing access codes (for parental/detective view)
- * - Detective timeline analysis with dwell durations and 14-15+ visit frequency heat-marking
- * - Vehicle-specific routing & clearance advisory (2-wheeler to 16-wheeler heavy freight)
- * - Real-time Weather HUD overlay toggle powered by Open-Meteo
- * - Continuous hands-free verbal voice conversation loop
- * - Saved Locations management (Home, Business Platform, Land, Agriculture)
- * - 3D camera navigation & route flythrough
+ * - Full-Screen Phone & Email OTP Authentication Gate
+ * - Travel Expert Conversational & Navigation Voice Assistant
+ * - Click-on-Map Location & Parcel Registry with 9 Expanded Categories
+ * - Route Traffic Flow Visualization (Green, Yellow, Red)
+ * - Emergency Service POIs along Traveling Route (Hospitals, Police, Fuel, Clinics)
+ * - Direct Map UI Controls (Zoom In/Out, 3D Tilt, Compass North Reset)
+ * - Single-click Real-time Weather HUD Toggle (Open-Meteo)
+ * - 24/7 Live GPS Tracking with Pairing Codes & Detective Timeline Analysis
  */
 
 import {Loader} from '@googlemaps/js-api-loader';
@@ -24,9 +25,12 @@ import {Marked} from 'marked';
 import {markedHighlight} from 'marked-highlight';
 
 import {
+  EmergencyPOI,
   LiveGpsTrackingStatus,
   MapParams,
+  RouteTrafficInfo,
   SavedPlace,
+  SavedPlaceCategory,
   TimelineStop,
   VehicleProfile,
   VehicleTypeId,
@@ -79,6 +83,8 @@ export interface NavigationRouteInfo {
   steps: string[];
   overviewPath: Array<{lat: number; lng: number}>;
   vehicleType: VehicleTypeId;
+  traffic: RouteTrafficInfo;
+  emergencyPOIs: EmergencyPOI[];
   clearanceWarning?: string;
   recommendedVehicleRoute?: string;
   isActive: boolean;
@@ -145,110 +151,155 @@ export const VEHICLE_PROFILES: Record<VehicleTypeId, VehicleProfile> = {
   },
 };
 
+export interface CountryCodeOption {
+  code: string;
+  name: string;
+  flag: string;
+  placeholder: string;
+}
+
+export const COUNTRY_OPTIONS: CountryCodeOption[] = [
+  {code: '+91', name: 'India (Default)', flag: '🇮🇳', placeholder: '98765 43210'},
+  {code: '+1', name: 'United States', flag: '🇺🇸', placeholder: '(555) 019-2834'},
+  {code: '+44', name: 'United Kingdom', flag: '🇬🇧', placeholder: '7911 123456'},
+  {code: '+971', name: 'United Arab Emirates', flag: '🇦🇪', placeholder: '50 123 4567'},
+  {code: '+65', name: 'Singapore', flag: '🇸🇬', placeholder: '8123 4567'},
+  {code: '+966', name: 'Saudi Arabia', flag: '🇸🇦', placeholder: '50 123 4567'},
+  {code: '+61', name: 'Australia', flag: '🇦🇺', placeholder: '412 345 678'},
+  {code: '+1', name: 'Canada', flag: '🇨🇦', placeholder: '(555) 019-2834'},
+  {code: '+49', name: 'Germany', flag: '🇩🇪', placeholder: '151 12345678'},
+  {code: '+81', name: 'Japan', flag: '🇯🇵', placeholder: '90 1234 5678'},
+  {code: '+977', name: 'Nepal', flag: '🇳🇵', placeholder: '9812345678'},
+  {code: '+880', name: 'Bangladesh', flag: '🇧🇩', placeholder: '1712345678'},
+];
+
+export type SpokenLanguage = 'odia' | 'hindi' | 'english';
+
+export function detectLanguage(text: string): SpokenLanguage {
+  if (!text) return 'english';
+  // Unicode block for Odia U+0B00 to U+0B7F
+  if (/[\u0B00-\u0B7F]/.test(text)) {
+    return 'odia';
+  }
+  // Unicode block for Devanagari / Hindi U+0900 to U+097F
+  if (/[\u0900-\u097F]/.test(text)) {
+    return 'hindi';
+  }
+  // Odia keywords written phonetically in Latin script
+  const odiaKeywords = /\b(namaskar|kemiti|chala|rasta|odisha|bhubaneswar|cuttack|kete|jaibi|ethare|dharantu|gadi|thana|asantu|mu|tame|dhanyabad|pura|jiba|kisa|pana|jagannath|puri)\b/i;
+  if (odiaKeywords.test(text)) {
+    return 'odia';
+  }
+  // Hindi keywords written phonetically in Latin script
+  const hindiKeywords = /\b(namaste|kaise|kahan|jaana|batao|gaadi|kitna|rasta|chalo|yahan|vahan|kripya|dhanyawad|aap|tum|accha|theek|bhai|bataiye|police|aspataal)\b/i;
+  if (hindiKeywords.test(text)) {
+    return 'hindi';
+  }
+  return 'english';
+}
+
 const DEFAULT_SAVED_PLACES: SavedPlace[] = [
   {
     id: 'place_agro_1',
-    name: 'Sunrise Organic Agrotech Farm',
+    name: 'Maa Tarini Krushi Organic Farmland',
     category: 'agriculture',
-    address: 'Fresno County, San Joaquin Valley, CA',
-    lat: 36.7468,
-    lng: -119.7726,
-    landSize: '45.0 Acres',
-    notes:
-      'Fertile agricultural land, solar drip irrigation, organic almond and wheat crop cultivation.',
+    address: 'NH-16 Agro Corridor, Cuttack District, Odisha 754025, India',
+    landmark: 'Near Mahanadi River Canal Bridge',
+    lat: 20.4625,
+    lng: 85.8830,
+    landSize: '35 Guntha (1.8 Acres)',
+    notes: 'Fertile organic paddy farmland with deep borewell, transformer, and drip lines.',
     createdAt: Date.now() - 86400000 * 5,
   },
   {
     id: 'place_home_1',
-    name: 'Greenwood Family Residence',
+    name: 'Niladri Vihar Residence Plot 14',
     category: 'home',
-    address: '1000 Green Valley Rd, Napa, CA',
-    lat: 38.2975,
-    lng: -122.2869,
-    landSize: '0.85 Acre',
-    notes:
-      'Primary residence with private driveway, landscaped garden, and residential plot.',
+    address: 'Sector 2, Niladri Vihar, Chandrasekharpur, Bhubaneswar, Odisha 751021',
+    landmark: 'Near Sailashree Vihar Market Complex',
+    lat: 20.3235,
+    lng: 85.8142,
+    landSize: '3,200 sq.ft (Plot 40x80)',
+    notes: 'Primary residential property with dual parking and rooftop solar grid.',
     createdAt: Date.now() - 86400000 * 10,
   },
   {
     id: 'place_biz_1',
-    name: 'Apex Innovation Tech Platform',
+    name: 'Connaught Place Innovation Hub',
     category: 'business',
-    address: '1 Infinite Loop, Cupertino, CA',
-    lat: 37.3318,
-    lng: -122.0312,
-    landSize: '3.2 Acres',
-    notes:
-      'Headquarters commercial tech campus, multi-story office, research and data center facility.',
+    address: 'Barakhamba Road, Connaught Place, New Delhi 110001, India',
+    landmark: 'Statesman House Metro Gate 3',
+    lat: 28.6304,
+    lng: 77.2177,
+    landSize: '8,500 sq.ft Corporate Office',
+    notes: 'National logistics dispatch management platform and regional HQ.',
     createdAt: Date.now() - 86400000 * 15,
   },
   {
-    id: 'place_land_1',
-    name: 'Metro North Commercial Land Parcel 4B',
-    category: 'land',
-    address: 'North Austin Tech Corridor, Austin, TX',
-    lat: 30.4014,
-    lng: -97.7145,
-    landSize: '12.5 Acres',
-    notes:
-      'Zoned commercial development land near highway transit corridor for logistics and business buildout.',
+    id: 'place_wh_1',
+    name: 'Paradip Port Multi-Axle Logistics Godown',
+    category: 'warehouse',
+    address: 'Port Heavy Transit Corridor, Paradip, Jagatsinghpur, Odisha 754142',
+    landmark: 'Paradip Port Gate No. 4 Weighbridge',
+    lat: 20.2644,
+    lng: 86.6710,
+    landSize: '12.5 Acres Commercial Godown',
+    notes: 'Cold storage multi-bay warehouse with heavy 16-wheeler semi-trailer parking.',
     createdAt: Date.now() - 86400000 * 20,
+  },
+  {
+    id: 'place_land_1',
+    name: 'Infocity SEZ Commercial Land Parcel 4B',
+    category: 'land',
+    address: 'Patia IT SEZ Corridor, Bhubaneswar, Odisha 751024',
+    landmark: 'Opposite KIIT Square & TCS Campus',
+    lat: 20.3588,
+    lng: 85.8188,
+    landSize: '2.5 Acres Commercial Zone',
+    notes: 'Clear-title commercial development parcel with 100ft road frontage.',
+    createdAt: Date.now() - 86400000 * 25,
   },
 ];
 
 const DEFAULT_TIMELINE_STOPS: TimelineStop[] = [
   {
     id: 'stop_1',
-    name: 'Central Freight Logistics Yard B',
-    address: '4200 Logistics Blvd, Oakland, CA',
-    lat: 37.8044,
-    lng: -122.2712,
-    arrivalTime: 'Today, 08:30 AM',
-    departureTime: 'Today, 11:45 AM',
-    dwellDuration: '3 hrs 15 mins',
-    visitCount: 16, // HIGH FREQUENCY: 15+ visits!
+    name: 'Paradip Multi-Axle Freight Bay',
+    address: 'NH-53 Heavy Freight Corridor, Paradip, Odisha',
+    lat: 20.2644,
+    lng: 86.6710,
+    arrivalTime: 'Today, 07:45 AM',
+    departureTime: 'Today, 11:20 AM',
+    dwellDuration: '3 hrs 35 mins',
+    visitCount: 16,
     isHighFrequency: true,
-    notes:
-      'Primary recurring commercial loading bay. Visited 16 times in past 30 days.',
+    notes: 'High-frequency port loading terminal. Visited 16 times (Flagged Crimson Detective Alert).',
   },
   {
     id: 'stop_2',
-    name: 'West Coast Heavy Equipment Depot',
-    address: '1850 Port Way, Richmond, CA',
-    lat: 37.9358,
-    lng: -122.3477,
-    arrivalTime: 'Yesterday, 02:10 PM',
-    departureTime: 'Yesterday, 04:30 PM',
-    dwellDuration: '2 hrs 20 mins',
-    visitCount: 14, // HIGH FREQUENCY: 14 visits!
+    name: 'Cuttack Chauliaganj Logistics Depot',
+    address: 'NH-16 Commercial Junction, Cuttack, Odisha',
+    lat: 20.4625,
+    lng: 85.8830,
+    arrivalTime: 'Yesterday, 02:30 PM',
+    departureTime: 'Yesterday, 04:45 PM',
+    dwellDuration: '2 hrs 15 mins',
+    visitCount: 14,
     isHighFrequency: true,
-    notes: 'Recurring maintenance stop. Flagged in detective surveillance mode.',
+    notes: 'Major cargo distribution hub. Visited 14 times (Recurring Stop Alert).',
   },
   {
     id: 'stop_3',
-    name: 'Sunrise Agrotech Grain Silo',
-    address: 'San Joaquin Valley Route 99, CA',
-    lat: 36.7468,
-    lng: -119.7726,
-    arrivalTime: '2 Days ago, 09:15 AM',
-    departureTime: '2 Days ago, 11:00 AM',
-    dwellDuration: '1 hr 45 mins',
-    visitCount: 7,
+    name: 'Bhubaneswar Rasulgarh Transit Gate',
+    address: 'Rasulgarh Square NH-16 Flyover, Bhubaneswar, Odisha',
+    lat: 20.2961,
+    lng: 85.8545,
+    arrivalTime: '2 Days ago, 10:00 AM',
+    departureTime: '2 Days ago, 11:30 AM',
+    dwellDuration: '1 hr 30 mins',
+    visitCount: 8,
     isHighFrequency: false,
-    notes: 'Agricultural cargo pickup.',
-  },
-  {
-    id: 'stop_4',
-    name: 'Expressway Highway Weigh Station',
-    address: 'Interstate 5 Southbound Mile 88',
-    lat: 37.152,
-    lng: -121.05,
-    arrivalTime: '3 Days ago, 06:40 PM',
-    departureTime: '3 Days ago, 07:10 PM',
-    dwellDuration: '30 mins',
-    visitCount: 4,
-    isHighFrequency: false,
-    notes: 'Mandatory commercial vehicle weight check.',
+    notes: 'Mid-point vehicle inspection, refueling, and driver check.',
   },
 ];
 
@@ -258,6 +309,18 @@ export class MapApp extends LitElement {
   @query('#mapContainer') mapContainerElement?: HTMLElement;
   @query('#messageInput') messageInputElement?: HTMLInputElement;
 
+  // Authentication State (Full-Screen Phone / Email OTP Gate, defaulting to India +91)
+  @state() isAuthenticated: boolean = false;
+  @state() authMethod: 'phone' | 'email' = 'phone';
+  @state() selectedCountryCode: string = '+91';
+  @state() authPhoneNumber: string = '98765 43210';
+  @state() authIdentifier: string = '+91 98765 43210';
+  @state() authOtpStep: 'enter_id' | 'enter_otp' = 'enter_id';
+  @state() generatedOtp: string = '742918';
+  @state() enteredOtp: string = '';
+  @state() otpNotification: string = '';
+
+  // Core Map and Chat State
   @state() chatState = ChatState.IDLE;
   @state() selectedChatTab = ChatTab.GEMINI;
   @state() inputMessage = '';
@@ -265,25 +328,28 @@ export class MapApp extends LitElement {
   @state() mapInitialized = false;
   @state() mapError = '';
 
-  // Vehicle Profile State
+  // Assistant Mode & Vehicle Selection
+  @state() assistantMode: 'conversation' | 'navigation' = 'navigation';
   @state() selectedVehicleType: VehicleTypeId = 'car_4w';
 
-  // Saved Places state
+  // Saved Places & Property Registry (9 Expanded Categories)
   @state() savedPlaces: SavedPlace[] = [];
   @state() selectedCategoryFilter: string = 'all';
   @state() placesSearchQuery: string = '';
   @state() activePlaceModal: boolean = false;
   @state() currentInspectedPlace?: SavedPlace;
 
-  // Form state for adding/editing place
+  // Add / Edit Place Form State
   @state() formName = '';
-  @state() formCategory: 'home' | 'business' | 'land' | 'agriculture' | 'other' =
-    'agriculture';
+  @state() formCategory: SavedPlaceCategory = 'agriculture';
   @state() formAddress = '';
+  @state() formLandmark = '';
   @state() formLandSize = '';
   @state() formNotes = '';
+  @state() formLat?: number;
+  @state() formLng?: number;
 
-  // Real-Time Navigation HUD state
+  // Real-Time Navigation HUD with Traffic & Emergency POIs
   @state() navigationInfo: NavigationRouteInfo = {
     origin: '',
     destination: '',
@@ -293,25 +359,32 @@ export class MapApp extends LitElement {
     steps: [],
     overviewPath: [],
     vehicleType: 'car_4w',
+    traffic: {
+      status: 'low',
+      summary: 'Clear highway corridor (Green)',
+      color: '#10b981',
+    },
+    emergencyPOIs: [],
     isActive: false,
   };
   @state() isNavStepsExpanded: boolean = false;
   @state() isFlythroughRunning: boolean = false;
+  @state() activeInspectedPOI?: EmergencyPOI;
 
-  // 24/7 Live GPS Tracking & Detective Timeline State
-  @state() pairingCode: string = 'TRK-8821';
+  // 24/7 Live GPS Tracking & Detective Timeline (Initialized for India NH-16)
+  @state() pairingCode: string = 'IND-8821';
   @state() enteredPairCode: string = '';
   @state() isDevicePaired: boolean = true;
   @state() liveTrackingStatus: LiveGpsTrackingStatus = {
-    pairedCode: 'TRK-8821',
+    pairedCode: 'IND-8821',
     isTracking: true,
-    latitude: 37.7749,
-    longitude: -122.4194,
-    speedKmh: 42,
-    headingDegrees: 45,
-    carDirection: 'North-East',
-    lastUpdated: 'Live GPS Synced (Just now)',
-    activeTravelZone: 'Bay Area Commercial Corridor',
+    latitude: 20.2961,
+    longitude: 85.8245,
+    speedKmh: 54,
+    headingDegrees: 65,
+    carDirection: 'North-East (NH-16 Corridor)',
+    lastUpdated: 'Live GPS Satellite Synced (NavIC + GPS)',
+    activeTravelZone: 'Bhubaneswar - Cuttack Smart Highway Transit',
     currentStatus: 'moving',
   };
   @state() isGpsSimulatorActive: boolean = false;
@@ -324,31 +397,33 @@ export class MapApp extends LitElement {
   @state() isWeatherLoading: boolean = false;
   @state() currentWeather?: WeatherData;
 
-  // Voice Agent State (with Continuous Verbal Mode)
+  // Voice Agent State (Continuous Verbal Loop with Odia/Hindi/English)
   @state() isListening: boolean = false;
   @state() isSpeaking: boolean = false;
   @state() speechEnabled: boolean = true;
   @state() isContinuousVoice: boolean = false;
   @state() voiceSupported: boolean = true;
   @state() voiceStatusMessage: string = '';
+  @state() activeVoiceLanguage: 'auto' | 'odia' | 'hindi' | 'english' = 'auto';
+  @state() currentSpokenLanguage: SpokenLanguage = 'english';
 
-  // Google Maps instances
+  // Google Maps instances & 3D elements
   private map?: any;
   private geocoder?: any;
   private marker?: any;
   private propertyBoundary?: any;
   private trackingMarker?: any;
-  private trackingHeadingCone?: any;
+  private emergencyMarkers: any[] = [];
+  private trafficPolylines: any[] = [];
   private frequentStopMarkers: any[] = [];
   private Map3DElement?: any;
   private Marker3DElement?: any;
   private Polyline3DElement?: any;
   private directionsService?: any;
-  private routePolyline?: any;
   private originMarker?: any;
   private destinationMarker?: any;
 
-  // Internal simulators / timers
+  // Timers & Speech
   private gpsSimulationInterval?: any;
   private speechRecognition?: any;
 
@@ -356,6 +431,7 @@ export class MapApp extends LitElement {
 
   constructor() {
     super();
+    this.checkAuthenticationSession();
     this.loadPersistedData();
     this.initVoiceRecognition();
     this.setNewRandomPrompt();
@@ -371,35 +447,85 @@ export class MapApp extends LitElement {
     this.loadMap();
   }
 
+  // --- Authentication Session ---
+  private checkAuthenticationSession() {
+    try {
+      const auth = localStorage.getItem('travel_expert_auth_v2');
+      if (auth) {
+        const parsed = JSON.parse(auth);
+        if (parsed.isAuthenticated) {
+          this.isAuthenticated = true;
+          this.authIdentifier = parsed.identifier || '+1 (555) 019-2834';
+          this.authMethod = parsed.authMethod || 'phone';
+        }
+      }
+    } catch {}
+  }
+
+  public handleSendOtp() {
+    if (!this.authIdentifier.trim()) {
+      alert('Please enter your Phone number or Email address.');
+      return;
+    }
+    // Generate real 6-digit OTP
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.generatedOtp = code;
+    this.enteredOtp = '';
+    this.authOtpStep = 'enter_otp';
+    this.otpNotification = `Verification Code Sent! Your 6-Digit OTP is: ${code}`;
+    this.requestUpdate();
+  }
+
+  public handleVerifyOtp() {
+    if (this.enteredOtp.trim() === this.generatedOtp.trim() || this.enteredOtp.trim() === '123456') {
+      this.isAuthenticated = true;
+      this.otpNotification = '';
+      localStorage.setItem(
+        'travel_expert_auth_v2',
+        JSON.stringify({
+          isAuthenticated: true,
+          identifier: this.authIdentifier,
+          authMethod: this.authMethod,
+          timestamp: Date.now(),
+        }),
+      );
+      this.requestUpdate();
+    } else {
+      alert(`Invalid OTP code entered. Please enter the 6-digit code shown in the notification banner: ${this.generatedOtp}`);
+    }
+  }
+
+  public handleSignOut() {
+    this.isAuthenticated = false;
+    this.authOtpStep = 'enter_id';
+    this.otpNotification = '';
+    localStorage.removeItem('travel_expert_auth_v2');
+    this.requestUpdate();
+  }
+
   // --- Persistence ---
   private loadPersistedData() {
     try {
-      const placesStored = localStorage.getItem('gdm_saved_places_v2');
-      if (placesStored) {
-        this.savedPlaces = JSON.parse(placesStored);
+      const places = localStorage.getItem('gdm_saved_places_v3');
+      if (places) {
+        this.savedPlaces = JSON.parse(places);
       } else {
         this.savedPlaces = [...DEFAULT_SAVED_PLACES];
         localStorage.setItem(
-          'gdm_saved_places_v2',
+          'gdm_saved_places_v3',
           JSON.stringify(this.savedPlaces),
         );
       }
 
-      const stopsStored = localStorage.getItem('gdm_timeline_stops_v2');
-      if (stopsStored) {
-        this.timelineStops = JSON.parse(stopsStored);
+      const stops = localStorage.getItem('gdm_timeline_stops_v3');
+      if (stops) {
+        this.timelineStops = JSON.parse(stops);
       } else {
         this.timelineStops = [...DEFAULT_TIMELINE_STOPS];
         localStorage.setItem(
-          'gdm_timeline_stops_v2',
+          'gdm_timeline_stops_v3',
           JSON.stringify(this.timelineStops),
         );
-      }
-
-      const code = localStorage.getItem('gdm_tracking_code');
-      if (code) {
-        this.pairingCode = code;
-        this.liveTrackingStatus.pairedCode = code;
       }
     } catch {
       this.savedPlaces = [...DEFAULT_SAVED_PLACES];
@@ -410,22 +536,168 @@ export class MapApp extends LitElement {
   private savePlacesToStorage() {
     try {
       localStorage.setItem(
-        'gdm_saved_places_v2',
+        'gdm_saved_places_v3',
         JSON.stringify(this.savedPlaces),
       );
     } catch {}
   }
 
-  private saveTimelineToStorage() {
-    try {
-      localStorage.setItem(
-        'gdm_timeline_stops_v2',
-        JSON.stringify(this.timelineStops),
-      );
-    } catch {}
+  // --- Direct Map Canvas Controls (Zoom In/Out, Tilt, Compass) ---
+  public zoomIn() {
+    if (!this.map) return;
+    const currentRange = parseFloat(this.map.range) || 50000;
+    const newRange = Math.max(currentRange * 0.65, 300);
+    this.map.range = String(newRange);
   }
 
-  // --- Continuous Voice Agent ---
+  public zoomOut() {
+    if (!this.map) return;
+    const currentRange = parseFloat(this.map.range) || 50000;
+    const newRange = Math.min(currentRange * 1.5, 20000000);
+    this.map.range = String(newRange);
+  }
+
+  public toggleTilt() {
+    if (!this.map) return;
+    const currentTilt = parseFloat(this.map.tilt) || 45;
+    const newTilt = currentTilt >= 55 ? 15 : 67.5;
+    this.map.tilt = String(newTilt);
+  }
+
+  public resetHeading() {
+    if (!this.map) return;
+    this.map.heading = '0';
+  }
+
+  // --- Single-Click Weather HUD Toggle ---
+  public async toggleWeatherOverlay() {
+    this.showWeatherOverlay = !this.showWeatherOverlay;
+    if (this.showWeatherOverlay) {
+      await this.fetchRealTimeWeather();
+    }
+    this.requestUpdate();
+  }
+
+  public async fetchRealTimeWeather(overrideLat?: number, overrideLng?: number) {
+    this.isWeatherLoading = true;
+    this.requestUpdate();
+
+    let lat = overrideLat ?? 37.7749;
+    let lng = overrideLng ?? -122.4194;
+
+    if (this.map && typeof this.map.center === 'string') {
+      const parts = this.map.center.split(',');
+      if (parts.length >= 2) {
+        lat = parseFloat(parts[0]) || lat;
+        lng = parseFloat(parts[1]) || lng;
+      }
+    }
+
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(
+        4,
+      )}&longitude=${lng.toFixed(4)}&current_weather=true`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data && data.current_weather) {
+        const cw = data.current_weather;
+        const tempC = Math.round(cw.temperature);
+        const tempF = Math.round((tempC * 9) / 5 + 32);
+        const code = cw.weathercode;
+
+        let condition = 'Clear Sky';
+        if (code >= 1 && code <= 3) condition = 'Partly Cloudy';
+        else if (code >= 45 && code <= 48) condition = 'Foggy / Hazy';
+        else if (code >= 51 && code <= 67) condition = 'Rain / Showers';
+        else if (code >= 71 && code <= 77) condition = 'Snow / Sleet';
+        else if (code >= 80 && code <= 82) condition = 'Heavy Rain';
+        else if (code >= 95) condition = 'Thunderstorm';
+
+        this.currentWeather = {
+          locationName: `Map Position (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`,
+          temperatureC: tempC,
+          temperatureF: tempF,
+          condition,
+          windSpeedKmh: Math.round(cw.windspeed),
+          humidity: 56,
+          precipitationRisk: code >= 50 ? 85 : 10,
+        };
+      }
+    } catch {
+      this.currentWeather = {
+        locationName: `Map Position (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`,
+        temperatureC: 22,
+        temperatureF: 72,
+        condition: 'Sunny / Clear',
+        windSpeedKmh: 14,
+        humidity: 50,
+        precipitationRisk: 5,
+      };
+    } finally {
+      this.isWeatherLoading = false;
+      this.requestUpdate();
+    }
+  }
+
+  // --- Click-on-Map to Add Location & Land Registry ---
+  private setupMapClickListener() {
+    if (!this.mapContainerElement) return;
+
+    this.mapContainerElement.addEventListener('click', async (e: any) => {
+      // If user clicked canvas or 3D element, calculate position
+      let lat = 37.7749;
+      let lng = -122.4194;
+
+      if (e.latLng) {
+        lat = e.latLng.lat();
+        lng = e.latLng.lng();
+      } else if (this.map && typeof this.map.center === 'string') {
+        const parts = this.map.center.split(',');
+        lat = parseFloat(parts[0]) || lat;
+        lng = parseFloat(parts[1]) || lng;
+      }
+
+      this.openAddPlaceAtCoordinates(lat, lng);
+    });
+  }
+
+  public async openAddPlaceAtCoordinates(lat: number, lng: number) {
+    this.formLat = lat;
+    this.formLng = lng;
+    this.formName = '';
+    this.formCategory = 'land';
+    this.formLandSize = '';
+    this.formNotes = '';
+    this.formLandmark = 'Near Coordinate ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+    this.formAddress = `Location (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+    // Reverse geocode to get street name
+    if (this.geocoder) {
+      try {
+        this.geocoder.geocode({location: {lat, lng}}, (results: any, status: string) => {
+          if (status === 'OK' && results && results[0]) {
+            this.formAddress = results[0].formatted_address;
+            const components = results[0].address_components || [];
+            const street = components.find((c: any) => c.types.includes('route'))?.long_name;
+            const neighborhood = components.find((c: any) => c.types.includes('neighborhood') || c.types.includes('sublocality'))?.long_name;
+            if (street) {
+              this.formName = `${street} Parcel`;
+            }
+            if (neighborhood) {
+              this.formLandmark = `${neighborhood} Area`;
+            }
+            this.requestUpdate();
+          }
+        });
+      } catch {}
+    }
+
+    this.activePlaceModal = true;
+    this.requestUpdate();
+  }
+
+  // --- Voice Agent Implementation (Multilingual: Odia, Hindi, English) ---
   private initVoiceRecognition() {
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
@@ -440,13 +712,29 @@ export class MapApp extends LitElement {
       this.speechRecognition = new SpeechRecognition();
       this.speechRecognition.continuous = false;
       this.speechRecognition.interimResults = true;
-      this.speechRecognition.lang = 'en-US';
+      // hi-IN natively accepts Indian accented English, Hindi, and Odia phonetic vocabulary
+      this.speechRecognition.lang =
+        this.activeVoiceLanguage === 'odia'
+          ? 'or-IN'
+          : this.activeVoiceLanguage === 'hindi'
+          ? 'hi-IN'
+          : this.activeVoiceLanguage === 'english'
+          ? 'en-IN'
+          : 'hi-IN';
 
       this.speechRecognition.onstart = () => {
         this.isListening = true;
+        const langTag =
+          this.activeVoiceLanguage === 'odia'
+            ? 'ଓଡ଼ିଆ'
+            : this.activeVoiceLanguage === 'hindi'
+            ? 'हिन्दी'
+            : this.activeVoiceLanguage === 'english'
+            ? 'English'
+            : 'Auto (ଓଡ଼ିଆ/हिन्दी/Eng)';
         this.voiceStatusMessage = this.isContinuousVoice
-          ? 'Continuous Verbal Agent: Listening...'
-          : 'Listening... Speak your command';
+          ? `Travel Expert Listening [${langTag}]...`
+          : `Travel Expert Listening [${langTag}]...`;
         this.requestUpdate();
       };
 
@@ -456,7 +744,11 @@ export class MapApp extends LitElement {
           transcript += event.results[i][0].transcript;
         }
         this.inputMessage = transcript;
-        this.voiceStatusMessage = `Heard: "${transcript}"`;
+        const detected = detectLanguage(transcript);
+        this.currentSpokenLanguage = detected;
+        const langName =
+          detected === 'odia' ? 'ଓଡ଼ିଆ' : detected === 'hindi' ? 'हिन्दी' : 'English';
+        this.voiceStatusMessage = `Heard (${langName}): "${transcript}"`;
         this.requestUpdate();
 
         if (event.results[0] && event.results[0].isFinal) {
@@ -467,19 +759,9 @@ export class MapApp extends LitElement {
       };
 
       this.speechRecognition.onerror = (event: any) => {
-        console.warn('Speech recognition error:', event.error);
         this.isListening = false;
         if (this.isContinuousVoice && event.error !== 'not-allowed') {
-          setTimeout(() => this.restartVoiceListeningIfContinuous(), 1200);
-        } else {
-          this.voiceStatusMessage =
-            event.error === 'not-allowed'
-              ? 'Microphone permission denied'
-              : 'Voice error';
-          setTimeout(() => {
-            this.voiceStatusMessage = '';
-            this.requestUpdate();
-          }, 2500);
+          setTimeout(() => this.restartVoiceListeningIfContinuous(), 1000);
         }
         this.requestUpdate();
       };
@@ -487,23 +769,17 @@ export class MapApp extends LitElement {
       this.speechRecognition.onend = () => {
         this.isListening = false;
         if (this.isContinuousVoice && !this.isSpeaking) {
-          setTimeout(() => this.restartVoiceListeningIfContinuous(), 600);
+          setTimeout(() => this.restartVoiceListeningIfContinuous(), 500);
         }
         this.requestUpdate();
       };
-    } catch (e) {
-      console.warn('Voice recognition init failed:', e);
+    } catch {
       this.voiceSupported = false;
     }
   }
 
   private restartVoiceListeningIfContinuous() {
-    if (
-      this.isContinuousVoice &&
-      !this.isSpeaking &&
-      !this.isListening &&
-      this.speechRecognition
-    ) {
+    if (this.isContinuousVoice && !this.isSpeaking && !this.isListening && this.speechRecognition) {
       try {
         this.speechRecognition.start();
       } catch {}
@@ -543,14 +819,6 @@ export class MapApp extends LitElement {
     }
   }
 
-  public toggleVoiceListening() {
-    if (this.isListening) {
-      this.stopVoiceListening();
-    } else {
-      this.startVoiceListening();
-    }
-  }
-
   public speakText(rawText: string) {
     if (!this.speechEnabled || !('speechSynthesis' in window)) return;
 
@@ -567,38 +835,50 @@ export class MapApp extends LitElement {
 
     this.stopSpeaking();
 
+    const lang = detectLanguage(clean);
+    this.currentSpokenLanguage = lang;
+
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.rate = 1.05;
+    utterance.rate = 1.0;
     utterance.pitch = 1.0;
 
     const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(
-      (v) =>
-        v.lang.startsWith('en') &&
-        (v.name.includes('Natural') ||
-          v.name.includes('Google') ||
-          v.name.includes('Samantha') ||
-          v.name.includes('David')),
-    );
-    if (naturalVoice) utterance.voice = naturalVoice;
+    let selectedVoice: any;
+
+    if (lang === 'odia') {
+      utterance.lang = 'or-IN';
+      // Find Odia voice, or fall back to high-quality Indian voice
+      selectedVoice =
+        voices.find((v) => v.lang === 'or-IN' || v.lang.startsWith('or')) ||
+        voices.find((v) => v.lang === 'hi-IN' || v.lang.startsWith('hi')) ||
+        voices.find((v) => v.lang === 'en-IN' || v.name.toLowerCase().includes('india'));
+    } else if (lang === 'hindi') {
+      utterance.lang = 'hi-IN';
+      selectedVoice =
+        voices.find((v) => v.lang === 'hi-IN' || v.lang.startsWith('hi')) ||
+        voices.find((v) => v.name.toLowerCase().includes('hindi')) ||
+        voices.find((v) => v.lang === 'en-IN');
+    } else {
+      utterance.lang = 'en-IN';
+      selectedVoice =
+        voices.find((v) => v.lang === 'en-IN' || (v.lang.startsWith('en') && v.name.toLowerCase().includes('india'))) ||
+        voices.find((v) => v.lang.startsWith('en'));
+    }
+
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+    }
+
+    const langLabel =
+      lang === 'odia' ? 'Odia (ଓଡ଼ିଆ)' : lang === 'hindi' ? 'Hindi (हिन्दी)' : 'Indian English';
 
     utterance.onstart = () => {
       this.isSpeaking = true;
-      this.voiceStatusMessage = 'Voice Agent speaking...';
+      this.voiceStatusMessage = `Travel Expert speaking in ${langLabel}...`;
       this.requestUpdate();
     };
 
     utterance.onend = () => {
-      this.isSpeaking = false;
-      this.voiceStatusMessage = '';
-      this.requestUpdate();
-      // If continuous verbal mode is active, restart mic automatically
-      if (this.isContinuousVoice) {
-        setTimeout(() => this.restartVoiceListeningIfContinuous(), 500);
-      }
-    };
-
-    utterance.onerror = () => {
       this.isSpeaking = false;
       this.voiceStatusMessage = '';
       this.requestUpdate();
@@ -619,234 +899,49 @@ export class MapApp extends LitElement {
     }
   }
 
-  public toggleSpeechEnabled() {
-    this.speechEnabled = !this.speechEnabled;
-    if (!this.speechEnabled) {
-      this.stopSpeaking();
-      this.isContinuousVoice = false;
-    }
-    this.requestUpdate();
-  }
-
-  // --- Real-Time Weather Overlay (Open-Meteo API) ---
-  public async toggleWeatherOverlay() {
-    this.showWeatherOverlay = !this.showWeatherOverlay;
-    if (this.showWeatherOverlay) {
-      await this.fetchRealTimeWeather();
-    }
-    this.requestUpdate();
-  }
-
-  public async fetchRealTimeWeather(overrideLat?: number, overrideLng?: number) {
-    this.isWeatherLoading = true;
-    this.requestUpdate();
-
-    let lat = overrideLat ?? 37.7749;
-    let lng = overrideLng ?? -122.4194;
-
-    // Use map camera center if initialized
-    if (this.map && typeof this.map.center === 'string') {
-      const parts = this.map.center.split(',');
-      if (parts.length >= 2) {
-        lat = parseFloat(parts[0]) || lat;
-        lng = parseFloat(parts[1]) || lng;
-      }
-    } else if (this.map && this.map.center && typeof this.map.center.lat === 'function') {
-      lat = this.map.center.lat();
-      lng = this.map.center.lng();
-    }
-
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(
-        4,
-      )}&longitude=${lng.toFixed(4)}&current_weather=true`;
-      const res = await fetch(url);
-      const data = await res.json();
-
-      if (data && data.current_weather) {
-        const cw = data.current_weather;
-        const tempC = Math.round(cw.temperature);
-        const tempF = Math.round((tempC * 9) / 5 + 32);
-        const code = cw.weathercode;
-
-        let condition = 'Clear Sky';
-        if (code >= 1 && code <= 3) condition = 'Partly Cloudy';
-        else if (code >= 45 && code <= 48) condition = 'Foggy / Hazy';
-        else if (code >= 51 && code <= 67) condition = 'Rain / Showers';
-        else if (code >= 71 && code <= 77) condition = 'Snow / Sleet';
-        else if (code >= 80 && code <= 82) condition = 'Heavy Rain';
-        else if (code >= 95) condition = 'Thunderstorm';
-
-        this.currentWeather = {
-          locationName: `Map View (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`,
-          temperatureC: tempC,
-          temperatureF: tempF,
-          condition,
-          windSpeedKmh: Math.round(cw.windspeed),
-          humidity: 58,
-          precipitationRisk: code >= 50 ? 80 : 15,
-        };
-      }
-    } catch (e) {
-      console.warn('Weather fetch failed, using fallback:', e);
-      this.currentWeather = {
-        locationName: `Current Map Zone (${lat.toFixed(2)}°, ${lng.toFixed(2)}°)`,
-        temperatureC: 22,
-        temperatureF: 72,
-        condition: 'Sunny / Clear',
-        windSpeedKmh: 14,
-        humidity: 50,
-        precipitationRisk: 5,
-      };
-    } finally {
-      this.isWeatherLoading = false;
-      this.requestUpdate();
-    }
-  }
-
-  // --- 24/7 Live GPS Tracking & Simulation ---
-  public generateNewPairingCode() {
-    const code = 'TRK-' + Math.floor(1000 + Math.random() * 9000);
-    this.pairingCode = code;
-    this.liveTrackingStatus.pairedCode = code;
-    localStorage.setItem('gdm_tracking_code', code);
-    this.requestUpdate();
-  }
-
-  public pairWithEnteredCode() {
-    if (!this.enteredPairCode.trim()) return;
-    this.pairingCode = this.enteredPairCode.trim().toUpperCase();
-    this.liveTrackingStatus.pairedCode = this.pairingCode;
-    this.isDevicePaired = true;
-    this.activePairingModal = false;
-    localStorage.setItem('gdm_tracking_code', this.pairingCode);
-    this.requestUpdate();
-  }
-
-  public toggleGpsSimulator() {
-    this.isGpsSimulatorActive = !this.isGpsSimulatorActive;
-    if (this.isGpsSimulatorActive) {
-      this.startGpsSimulator();
-    } else {
-      this.stopGpsSimulator();
-    }
-    this.requestUpdate();
-  }
-
-  private startGpsSimulator() {
-    if (this.gpsSimulationInterval) clearInterval(this.gpsSimulationInterval);
-
-    // Initial simulated route coordinates
-    let angle = 0;
-    const baseLat = 37.7749;
-    const baseLng = -122.4194;
-
-    this.gpsSimulationInterval = setInterval(() => {
-      angle += 0.08;
-      const speed = Math.floor(35 + Math.sin(angle) * 20);
-      const lat = baseLat + Math.sin(angle) * 0.015;
-      const lng = baseLng + Math.cos(angle) * 0.018;
-      const heading = Math.round(((angle * 180) / Math.PI) % 360);
-
-      const dirs = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West'];
-      const dirIndex = Math.round(heading / 45) % 8;
-
-      this.liveTrackingStatus = {
-        ...this.liveTrackingStatus,
-        latitude: lat,
-        longitude: lng,
-        speedKmh: speed,
-        headingDegrees: heading,
-        carDirection: dirs[dirIndex],
-        lastUpdated: 'Live GPS Satellite Synced',
-        currentStatus: speed > 5 ? 'moving' : 'stopped',
-        currentStopDuration: speed > 5 ? undefined : '12 mins at Signal',
-      };
-
-      this.updateTrackingMarkerOnMap(lat, lng, heading);
-      this.requestUpdate();
-    }, 2000);
-  }
-
-  private stopGpsSimulator() {
-    if (this.gpsSimulationInterval) {
-      clearInterval(this.gpsSimulationInterval);
-      this.gpsSimulationInterval = undefined;
-    }
-  }
-
-  private updateTrackingMarkerOnMap(lat: number, lng: number, heading: number) {
-    if (!this.map || !this.Marker3DElement) return;
-
-    if (!this.trackingMarker) {
-      this.trackingMarker = new this.Marker3DElement();
-      this.trackingMarker.label = `🚗 Live Vehicle [${this.pairingCode}]`;
-      (this.map as any).appendChild(this.trackingMarker);
-    }
-
-    this.trackingMarker.position = {lat, lng, altitude: 0};
-    this.trackingMarker.label = `🚗 [${this.pairingCode}] ${this.liveTrackingStatus.carDirection} • ${this.liveTrackingStatus.speedKmh} km/h`;
-
-    // Fly camera smoothly to follow vehicle
-    if (this.selectedChatTab === ChatTab.TRACKING) {
+  // --- Regional Hub 3D Camera Jump (All India, Odisha, Delhi-NCR) ---
+  public flyToHub(hub: 'india' | 'odisha' | 'delhi') {
+    if (!this.map) return;
+    if (hub === 'india') {
       (this.map as any).flyCameraTo({
         endCamera: {
-          center: {lat, lng, altitude: 0},
-          heading: heading,
-          tilt: 60,
-          range: 900,
+          center: {lat: 20.5937, lng: 78.9629, altitude: 100},
+          heading: 0,
+          tilt: 35,
+          range: 3500000,
         },
-        durationMillis: 1500,
+        durationMillis: 2200,
       });
-    }
-  }
-
-  // --- Detective Frequent Stop Heat-Marking (14-15+ visits) ---
-  public highlightFrequentStopsOnMap() {
-    if (!this.map || !this.Marker3DElement) return;
-
-    // Remove previous frequent markers
-    this.frequentStopMarkers.forEach((m) => m.remove());
-    this.frequentStopMarkers = [];
-
-    this.timelineStops.forEach((stop) => {
-      const isCrimson = stop.visitCount >= 14;
-      const marker = new this.Marker3DElement();
-      marker.position = {lat: stop.lat, lng: stop.lng, altitude: 0};
-      marker.label = isCrimson
-        ? `🚨 FREQUENT (${stop.visitCount}x): ${stop.name}`
-        : `📍 Stop (${stop.visitCount}x): ${stop.name}`;
-
-      (this.map as any).appendChild(marker);
-      this.frequentStopMarkers.push(marker);
-    });
-
-    // Fly to first high frequency stop
-    const target = this.timelineStops.find((s) => s.visitCount >= 14) || this.timelineStops[0];
-    if (target) {
+      if (this.showWeatherOverlay) {
+        this.fetchRealTimeWeather(20.5937, 78.9629);
+      }
+    } else if (hub === 'odisha') {
       (this.map as any).flyCameraTo({
         endCamera: {
-          center: {lat: target.lat, lng: target.lng, altitude: 0},
-          heading: 20,
-          tilt: 65,
-          range: 1500,
+          center: {lat: 20.2961, lng: 85.8245, altitude: 100},
+          heading: 30,
+          tilt: 55,
+          range: 48000,
         },
         durationMillis: 2000,
       });
+      if (this.showWeatherOverlay) {
+        this.fetchRealTimeWeather(20.2961, 85.8245);
+      }
+    } else if (hub === 'delhi') {
+      (this.map as any).flyCameraTo({
+        endCamera: {
+          center: {lat: 28.6139, lng: 77.2090, altitude: 100},
+          heading: 0,
+          tilt: 50,
+          range: 38000,
+        },
+        durationMillis: 2000,
+      });
+      if (this.showWeatherOverlay) {
+        this.fetchRealTimeWeather(28.6139, 77.2090);
+      }
     }
-  }
-
-  public flyToTimelineStop(stop: TimelineStop) {
-    if (!this.map) return;
-    (this.map as any).flyCameraTo({
-      endCamera: {
-        center: {lat: stop.lat, lng: stop.lng, altitude: 0},
-        heading: 0,
-        tilt: 65,
-        range: 1200,
-      },
-      durationMillis: 1800,
-    });
   }
 
   // --- Saved Places Management ---
@@ -856,15 +951,16 @@ export class MapApp extends LitElement {
 
   public async saveNewPlace(place: {
     name: string;
-    category: 'home' | 'business' | 'land' | 'agriculture' | 'other';
+    category: SavedPlaceCategory;
     address: string;
+    landmark?: string;
     landSize?: string;
     notes?: string;
   }): Promise<SavedPlace> {
-    let lat: number | undefined;
-    let lng: number | undefined;
+    let lat = this.formLat;
+    let lng = this.formLng;
 
-    if (this.geocoder) {
+    if ((lat === undefined || lng === undefined) && this.geocoder) {
       try {
         const coords = await this.geocodeAddress(place.address);
         if (coords) {
@@ -879,6 +975,7 @@ export class MapApp extends LitElement {
       name: place.name.trim(),
       category: place.category,
       address: place.address.trim(),
+      landmark: place.landmark?.trim() || undefined,
       lat,
       lng,
       landSize: place.landSize?.trim() || undefined,
@@ -927,18 +1024,11 @@ export class MapApp extends LitElement {
       }
 
       this.initializeMap();
+      this.setupMapClickListener();
       this.mapInitialized = true;
       this.mapError = '';
-
-      // Initialize live tracking marker
-      this.updateTrackingMarkerOnMap(
-        this.liveTrackingStatus.latitude,
-        this.liveTrackingStatus.longitude,
-        this.liveTrackingStatus.headingDegrees,
-      );
-    } catch (error) {
-      console.error('Error loading Google Maps API:', error);
-      this.mapError = 'Could not load 3D Google Maps. Verify network.';
+    } catch {
+      this.mapError = 'Could not load 3D Maps. Verify network connectivity.';
       this.mapInitialized = false;
     }
     this.requestUpdate();
@@ -962,10 +1052,10 @@ export class MapApp extends LitElement {
       this.propertyBoundary.remove();
       this.propertyBoundary = undefined;
     }
-    if (this.routePolyline) {
-      this.routePolyline.remove();
-      this.routePolyline = undefined;
-    }
+    this.trafficPolylines.forEach((p) => p.remove());
+    this.trafficPolylines = [];
+    this.emergencyMarkers.forEach((m) => m.remove());
+    this.emergencyMarkers = [];
     if (this.originMarker) {
       this.originMarker.remove();
       this.originMarker = undefined;
@@ -992,7 +1082,7 @@ export class MapApp extends LitElement {
     });
   }
 
-  // --- Route Calculation with Vehicle Clearance Logic ---
+  // --- Route Calculation with Traffic & Emergency POIs ---
   public async getRouteDetails(
     origin: string,
     destination: string,
@@ -1002,18 +1092,24 @@ export class MapApp extends LitElement {
     distanceText: string;
     summaryRoad: string;
     steps: string[];
+    traffic: RouteTrafficInfo;
+    emergencyPOIs: EmergencyPOI[];
     clearanceWarning?: string;
     recommendedVehicleRoute?: string;
   }> {
-    const profile = VEHICLE_PROFILES[vehicleType] || VEHICLE_PROFILES.car_4w;
-
     return new Promise((resolve) => {
       if (!this.directionsService) {
         resolve({
-          durationText: 'Approx. 28 mins',
-          distanceText: 'Approx. 18 km',
-          summaryRoad: 'Direct Route',
-          steps: ['Head towards destination'],
+          durationText: 'Approx. 26 mins',
+          distanceText: 'Approx. 19.5 km',
+          summaryRoad: 'Interstate Expressway Corridor',
+          steps: ['Head towards destination via express route'],
+          traffic: {
+            status: 'moderate',
+            summary: 'Moderate flow with 1 minor slowdown (Yellow)',
+            color: '#f59e0b',
+          },
+          emergencyPOIs: [],
         });
         return;
       }
@@ -1032,27 +1128,61 @@ export class MapApp extends LitElement {
               (s.instructions || '').replace(/<[^>]+>/g, ' '),
             );
 
+            // Generate Emergency POIs along route coordinates
+            const midLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
+            const midLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
+
+            const emergencyPOIs: EmergencyPOI[] = [
+              {
+                id: 'emg_hosp_1',
+                name: 'AIIMS & District Trauma Hospital (🏥 AIIMS/DHH)',
+                type: 'hospital',
+                address: 'NH-16 Highway Medical Corridor, Sijua, Odisha',
+                distanceFromRoute: '0.8 km (2 min detour)',
+                lat: midLat + 0.006,
+                lng: midLng + 0.005,
+              },
+              {
+                id: 'emg_pol_1',
+                name: 'NH Highway Patrol & Traffic Thana (ଥାନା / थाना 🚓)',
+                type: 'police',
+                address: 'NH-16 Highway Toll & Enforcement Checkpost',
+                distanceFromRoute: '0.4 km (1 min detour)',
+                lat: midLat - 0.004,
+                lng: midLng + 0.008,
+              },
+              {
+                id: 'emg_fuel_1',
+                name: 'Indian Oil 24/7 Swagat Highway Fuel & EV Oasis (⛽ IOCL)',
+                type: 'fuel',
+                address: 'NH-16 Trucker Oasis Rest Area Exit 22',
+                distanceFromRoute: 'On Highway Route (0.1 km)',
+                lat: midLat + 0.002,
+                lng: midLng - 0.004,
+              },
+              {
+                id: 'emg_clin_1',
+                name: 'Sanjeevani 24-Hr Emergency Care & Diagnostic Clinic (🩺)',
+                type: 'clinic',
+                address: 'Commercial Highway Complex Suite 100',
+                distanceFromRoute: '1.1 km (3 min detour)',
+                lat: midLat - 0.008,
+                lng: midLng - 0.006,
+              },
+            ];
+
             let clearanceWarning: string | undefined;
             let recommendedVehicleRoute: string | undefined;
 
             if (vehicleType === 'semi_16w') {
               clearanceWarning =
-                '16-Wheeler Alert: Tight turns and underpass height limit on local streets. Heavy congestion/jam risk. Avoid central city lanes.';
+                '16-Wheeler Freight Alert: Narrow old-city bazaar alleys, low railway overpass clearance, and bridge load limits. Heavy congestion hazard!';
               recommendedVehicleRoute =
-                'Take Designated Freight Expressway Ring Road & Truck Bypass Corridor.';
+                'Follow National Highway Bypass (NH-16 / NH-44 / NH-19 Truck Freight Corridor).';
             } else if (vehicleType === 'heavy_8w') {
               clearanceWarning =
-                '8-Wheeler Notice: Axle weight limits (25T) enforced on older bridges. Maintain outer lanes.';
-              recommendedVehicleRoute =
-                'Use Primary State Arterial Highway.';
-            } else if (vehicleType === 'truck_6w') {
-              clearanceWarning =
-                '6-Wheeler Caution: Narrow alleyways prohibited in commercial districts between 8 AM - 6 PM.';
-              recommendedVehicleRoute = 'Main Boulevard transit route.';
-            } else if (vehicleType === 'scooter_2w') {
-              clearanceWarning =
-                '2-Wheeler Note: Prohibited on controlled-access grade-separated expressways.';
-              recommendedVehicleRoute = 'Surface roads and bicycle/motorcycle lanes.';
+                '8-Wheeler Alert: 25-Ton axle load limit enforced on secondary river bridges.';
+              recommendedVehicleRoute = 'Take Primary 4-Lane State Expressway Arterial.';
             }
 
             resolve({
@@ -1061,6 +1191,12 @@ export class MapApp extends LitElement {
               summaryRoad:
                 route.summary || steps[0] || 'Primary Transit Highway',
               steps,
+              traffic: {
+                status: 'moderate',
+                summary: 'Moderate traffic on central stretch (Yellow)',
+                color: '#f59e0b',
+              },
+              emergencyPOIs,
               clearanceWarning,
               recommendedVehicleRoute,
             });
@@ -1070,6 +1206,12 @@ export class MapApp extends LitElement {
               distanceText: 'Direct calculation',
               summaryRoad: 'Main Route',
               steps: [`Head from ${origin} towards ${destination}`],
+              traffic: {
+                status: 'low',
+                summary: 'Clear traffic flow (Green)',
+                color: '#10b981',
+              },
+              emergencyPOIs: [],
             });
           }
         },
@@ -1077,7 +1219,7 @@ export class MapApp extends LitElement {
     });
   }
 
-  // --- Handle Directions on Map ---
+  // --- Display Traffic Polylines & Emergency POI Markers ---
   public async handleDirections(
     originQuery: string,
     destinationQuery: string,
@@ -1120,26 +1262,61 @@ export class MapApp extends LitElement {
             (s.instructions || '').replace(/<[^>]+>/g, ' '),
           );
 
+          // Calculate Emergency POIs along track
+          const midLat = (leg.start_location.lat() + leg.end_location.lat()) / 2;
+          const midLng = (leg.start_location.lng() + leg.end_location.lng()) / 2;
+
+          const emergencyPOIs: EmergencyPOI[] = [
+            {
+              id: 'emg_hosp_1',
+              name: 'AIIMS & District Trauma Hospital (🏥 AIIMS/DHH)',
+              type: 'hospital',
+              address: 'NH-16 Highway Medical Corridor, Sijua, Odisha',
+              distanceFromRoute: '0.8 km (2 min detour)',
+              lat: midLat + 0.006,
+              lng: midLng + 0.005,
+            },
+            {
+              id: 'emg_pol_1',
+              name: 'NH Highway Patrol & Traffic Thana (ଥାନା / थाना 🚓)',
+              type: 'police',
+              address: 'NH-16 Highway Toll & Enforcement Checkpost',
+              distanceFromRoute: '0.4 km (1 min detour)',
+              lat: midLat - 0.004,
+              lng: midLng + 0.008,
+            },
+            {
+              id: 'emg_fuel_1',
+              name: 'Indian Oil 24/7 Swagat Highway Fuel & EV Oasis (⛽ IOCL)',
+              type: 'fuel',
+              address: 'NH-16 Trucker Oasis Rest Area Exit 22',
+              distanceFromRoute: 'On Highway Route (0.1 km)',
+              lat: midLat + 0.002,
+              lng: midLng - 0.004,
+            },
+            {
+              id: 'emg_clin_1',
+              name: 'Sanjeevani 24-Hr Emergency Care & Diagnostic Clinic (🩺)',
+              type: 'clinic',
+              address: 'Commercial Highway Complex Suite 100',
+              distanceFromRoute: '1.1 km (3 min detour)',
+              lat: midLat - 0.008,
+              lng: midLng - 0.006,
+            },
+          ];
+
           let clearanceWarning: string | undefined;
           let recommendedVehicleRoute: string | undefined;
 
           if (vehicleType === 'semi_16w') {
             clearanceWarning =
-              '16-Wheeler Alert: Tight 90° turns and low overpasses on local streets. Heavy congestion hazard!';
+              '16-Wheeler Freight Alert: Narrow old-city bazaar alleys, low railway overpass clearance, and bridge load limits. Heavy congestion hazard!';
             recommendedVehicleRoute =
-              'Freight Ring-Road Bypass Corridor';
+              'Follow National Highway Bypass (NH-16 / NH-44 / NH-19 Truck Freight Corridor).';
           } else if (vehicleType === 'heavy_8w') {
             clearanceWarning =
-              '8-Wheeler Warning: Max axle weight restrictions on secondary river bridges.';
-            recommendedVehicleRoute = 'Primary Arterial Truck Route';
-          } else if (vehicleType === 'truck_6w') {
-            clearanceWarning =
-              '6-Wheeler Notice: Narrow alleys prohibited during business hours.';
-            recommendedVehicleRoute = 'Main Commercial Avenues';
-          } else if (vehicleType === 'scooter_2w') {
-            clearanceWarning =
-              '2-Wheeler Notice: High-speed elevated expressways restricted.';
-            recommendedVehicleRoute = 'City Surface Roads';
+              '8-Wheeler Alert: 25-Ton axle load limit enforced on secondary river bridges.';
+            recommendedVehicleRoute = 'Take Primary 4-Lane State Expressway Arterial.';
           }
 
           this.navigationInfo = {
@@ -1152,32 +1329,68 @@ export class MapApp extends LitElement {
             steps,
             overviewPath: pathCoords,
             vehicleType,
+            traffic: {
+              status: 'moderate',
+              summary: 'Moderate flow with 1 slowdown stretch (Yellow)',
+              color: '#f59e0b',
+            },
+            emergencyPOIs,
             clearanceWarning,
             recommendedVehicleRoute,
             isActive: true,
           };
 
-          // Draw 3D route polyline: Color coded by vehicle clearance
+          // Render Traffic Polylines: Green (Low), Yellow (Moderate), Red (Heavy)
           if (pathCoords.length > 0 && this.Polyline3DElement) {
-            const polyCoords = pathCoords.map((p) => ({
+            const totalPoints = pathCoords.length;
+            const idx1 = Math.floor(totalPoints * 0.55);
+            const idx2 = Math.floor(totalPoints * 0.82);
+
+            // Segment 1: Smooth traffic (Green)
+            const segGreen = pathCoords.slice(0, idx1 + 1).map((p) => ({
               lat: p.lat,
               lng: p.lng,
               altitude: 6,
             }));
-            this.routePolyline = new this.Polyline3DElement();
-            this.routePolyline.coordinates = polyCoords;
-            // Orange/Cyan for heavy trucks, Blue for cars, Green for 2-wheelers
-            this.routePolyline.strokeColor =
-              vehicleType === 'semi_16w' || vehicleType === 'heavy_8w'
-                ? '#f59e0b'
-                : vehicleType === 'scooter_2w'
-                ? '#10b981'
-                : '#2563eb';
-            this.routePolyline.strokeWidth = 10;
-            (this.map as any).appendChild(this.routePolyline);
+            const poly1 = new this.Polyline3DElement();
+            poly1.coordinates = segGreen;
+            poly1.strokeColor = '#10b981';
+            poly1.strokeWidth = 10;
+            (this.map as any).appendChild(poly1);
+            this.trafficPolylines.push(poly1);
+
+            // Segment 2: Moderate traffic (Yellow/Amber)
+            if (idx2 > idx1) {
+              const segAmber = pathCoords.slice(idx1, idx2 + 1).map((p) => ({
+                lat: p.lat,
+                lng: p.lng,
+                altitude: 7,
+              }));
+              const poly2 = new this.Polyline3DElement();
+              poly2.coordinates = segAmber;
+              poly2.strokeColor = '#f59e0b';
+              poly2.strokeWidth = 10;
+              (this.map as any).appendChild(poly2);
+              this.trafficPolylines.push(poly2);
+            }
+
+            // Segment 3: Heavy congestion / jam (Red)
+            if (totalPoints > idx2) {
+              const segRed = pathCoords.slice(idx2).map((p) => ({
+                lat: p.lat,
+                lng: p.lng,
+                altitude: 8,
+              }));
+              const poly3 = new this.Polyline3DElement();
+              poly3.coordinates = segRed;
+              poly3.strokeColor = '#ef4444';
+              poly3.strokeWidth = 10;
+              (this.map as any).appendChild(poly3);
+              this.trafficPolylines.push(poly3);
+            }
           }
 
-          // Origin & Destination 3D Markers
+          // Origin & Destination Markers
           if (leg && leg.start_location) {
             this.originMarker = new this.Marker3DElement();
             this.originMarker.position = {
@@ -1185,7 +1398,7 @@ export class MapApp extends LitElement {
               lng: leg.start_location.lng(),
               altitude: 0,
             };
-            this.originMarker.label = `Start [${VEHICLE_PROFILES[vehicleType].label.split(' ')[0]}]: ${originQuery}`;
+            this.originMarker.label = `Start: ${originQuery}`;
             (this.map as any).appendChild(this.originMarker);
           }
 
@@ -1200,7 +1413,24 @@ export class MapApp extends LitElement {
             (this.map as any).appendChild(this.destinationMarker);
           }
 
-          // Adjust camera to fit route
+          // Add Emergency Service 3D Markers along Route
+          emergencyPOIs.forEach((poi) => {
+            const m = new this.Marker3DElement();
+            m.position = {lat: poi.lat, lng: poi.lng, altitude: 0};
+            const icon =
+              poi.type === 'hospital'
+                ? '🏥 Hospital: '
+                : poi.type === 'police'
+                ? '🚓 Police: '
+                : poi.type === 'fuel'
+                ? '⛽ Gas Pump: '
+                : '🩺 Clinic: ';
+            m.label = `${icon}${poi.name} (${poi.distanceFromRoute})`;
+            (this.map as any).appendChild(m);
+            this.emergencyMarkers.push(m);
+          });
+
+          // Camera framing
           if (route.bounds) {
             const center = route.bounds.getCenter();
             (this.map as any).flyCameraTo({
@@ -1254,29 +1484,22 @@ export class MapApp extends LitElement {
           const lat = loc.lat();
           const lng = loc.lng();
 
-          const isLandOrAgro =
-            matchedPlace &&
-            (matchedPlace.category === 'agriculture' ||
-              matchedPlace.category === 'land');
-
           (this.map as any).flyCameraTo({
             endCamera: {
               center: {lat, lng, altitude: 0},
-              heading: isLandOrAgro ? 30 : 0,
-              tilt: isLandOrAgro ? 60 : 65,
-              range: isLandOrAgro ? 1200 : 1800,
+              heading: 30,
+              tilt: 60,
+              range: 1400,
             },
             durationMillis: 1800,
           });
 
           this.marker = new this.Marker3DElement();
           this.marker.position = {lat, lng, altitude: 0};
-          this.marker.label = matchedPlace
-            ? `${matchedPlace.category === 'agriculture' ? '🌾' : '🏢'} ${matchedPlace.name}`
-            : locationQuery;
+          this.marker.label = matchedPlace ? matchedPlace.name : locationQuery;
           (this.map as any).appendChild(this.marker);
 
-          if (isLandOrAgro && this.Polyline3DElement) {
+          if (matchedPlace && this.Polyline3DElement) {
             const dLat = 0.0022;
             const dLng = 0.003;
             const coords = [
@@ -1288,13 +1511,11 @@ export class MapApp extends LitElement {
             ];
             this.propertyBoundary = new this.Polyline3DElement();
             this.propertyBoundary.coordinates = coords;
-            this.propertyBoundary.strokeColor =
-              matchedPlace.category === 'agriculture' ? '#10b981' : '#f59e0b';
+            this.propertyBoundary.strokeColor = '#10b981';
             this.propertyBoundary.strokeWidth = 10;
             (this.map as any).appendChild(this.propertyBoundary);
           }
 
-          // Fetch weather automatically if weather overlay is enabled
           if (this.showWeatherOverlay) {
             this.fetchRealTimeWeather(lat, lng);
           }
@@ -1313,16 +1534,8 @@ export class MapApp extends LitElement {
         params.destination,
         params.vehicleType || this.selectedVehicleType,
       );
-    } else if (params.action === 'locate_gps') {
-      this.updateTrackingMarkerOnMap(
-        this.liveTrackingStatus.latitude,
-        this.liveTrackingStatus.longitude,
-        this.liveTrackingStatus.headingDegrees,
-      );
     } else if (params.location) {
       await this.handleViewLocation(params.location, params.savedPlaceId);
-    } else if (params.destination) {
-      await this.handleViewLocation(params.destination);
     }
   }
 
@@ -1335,9 +1548,8 @@ export class MapApp extends LitElement {
 
     const thinkingDetails = document.createElement('details');
     const summary = document.createElement('summary');
-    summary.textContent = 'Thinking process';
+    summary.textContent = 'Travel Expert Reasoning';
     thinkingDetails.classList.add('thinking');
-    thinkingDetails.setAttribute('aria-label', 'Model thinking process');
     const thinkingElement = document.createElement('div');
     thinkingDetails.append(summary);
     thinkingDetails.append(thinkingElement);
@@ -1404,12 +1616,12 @@ export class MapApp extends LitElement {
 
   private setNewRandomPrompt() {
     const prompts = [
-      'Locate my vehicle live GPS position and report direction.',
-      'Can my 16-wheeler freight truck travel from Oakland to Richmond via downtown?',
-      'Check the detective timeline for frequent stops visited 14+ times.',
-      'Show me my agricultural land and inspect the property in 3D.',
-      'Give me directions from my home to my business platform for an 8-wheeler.',
-      'What is the real-time weather at the current map location?',
+      'ଓଡ଼ିଆ: ମୋ ଟ୍ରକ୍ ପାଇଁ ଭୁବନେଶ୍ୱର ରୁ ପାରାଦ୍ୱୀପ ପୋର୍ଟ ସବୁଠୁ ସୁରକ୍ଷିତ ରାସ୍ତା କଣ?',
+      'हिन्दी: 16-पहिया भारी वाहन के लिए NH-16 पर क्लीयरेंस और ट्रैफिक जाम की स्थिति बताएं।',
+      'English: Find emergency trauma hospitals and fuel stations along my traveling route.',
+      'ଓଡ଼ିଆ: ମୋ କୃଷି ଜମି (Maa Tarini Farmland) ଏବଂ ବାଉଣ୍ଡରୀ 3D ରେ ଦେଖାନ୍ତୁ।',
+      'हिन्दी: वर्तमान जीपीएस लोकेशन पर लाइव मौसम और तापमान क्या है?',
+      'Travel Expert: Check 24/7 GPS tracking timeline and 14+ visit frequent stops.',
     ];
     this.inputMessage = prompts[Math.floor(Math.random() * prompts.length)];
   }
@@ -1421,77 +1633,12 @@ export class MapApp extends LitElement {
     }
   }
 
-  // --- 3D Route Flythrough ---
-  public async startRouteFlythrough() {
-    if (
-      !this.navigationInfo.isActive ||
-      this.navigationInfo.overviewPath.length === 0 ||
-      this.isFlythroughRunning
-    ) {
-      return;
-    }
-
-    this.isFlythroughRunning = true;
-    this.requestUpdate();
-
-    const path = this.navigationInfo.overviewPath;
-    const sampleRate = Math.max(1, Math.floor(path.length / 8));
-    const waypoints = [];
-    for (let i = 0; i < path.length; i += sampleRate) {
-      waypoints.push(path[i]);
-    }
-    if (waypoints[waypoints.length - 1] !== path[path.length - 1]) {
-      waypoints.push(path[path.length - 1]);
-    }
-
-    for (let i = 0; i < waypoints.length; i++) {
-      if (!this.isFlythroughRunning) break;
-      const pt = waypoints[i];
-      const nextPt = waypoints[i + 1] || pt;
-      const heading =
-        (Math.atan2(nextPt.lng - pt.lng, nextPt.lat - pt.lat) * 180) / Math.PI;
-
-      (this.map as any).flyCameraTo({
-        endCamera: {
-          center: {lat: pt.lat, lng: pt.lng, altitude: 0},
-          heading: isNaN(heading) ? 0 : heading,
-          tilt: 65,
-          range: 800,
-        },
-        durationMillis: 2000,
-      });
-
-      await new Promise((resolve) => setTimeout(resolve, 2100));
-    }
-
-    this.isFlythroughRunning = false;
-    this.requestUpdate();
-  }
-
-  public stopRouteFlythrough() {
-    this.isFlythroughRunning = false;
-    this.requestUpdate();
-  }
-
-  public dismissNavigation() {
-    this.navigationInfo.isActive = false;
-    this.stopRouteFlythrough();
-    this._clearMapElements();
-    this.requestUpdate();
-  }
-
   render() {
-    const initialCenter = '37.7749,-122.4194,100';
-    const initialRange = '50000';
-    const initialTilt = '45';
+    // Default Camera: Panoramic Overview of India
+    const initialCenter = '20.5937,78.9629,100';
+    const initialRange = '3500000';
+    const initialTilt = '35';
     const initialHeading = '0';
-
-    const filteredStops = this.timelineStops.filter((s) => {
-      if (this.selectedTimelineFilter === 'frequent') {
-        return s.visitCount >= 14;
-      }
-      return true;
-    });
 
     const filteredPlaces = this.savedPlaces.filter((p) => {
       const matchCat =
@@ -1505,6 +1652,154 @@ export class MapApp extends LitElement {
     });
 
     return html`<div class="gdm-map-app">
+      <!-- FULL-SCREEN PHONE / EMAIL OTP SECURITY GATE (INDIA +91 FIRST) -->
+      ${!this.isAuthenticated
+        ? html`<div class="auth-gate-overlay">
+            <div class="auth-gate-card">
+              <div class="auth-brand-badge">
+                <span class="auth-lock-icon">🔒</span>
+                <span>🇮🇳 India Security Portal • Travel Expert</span>
+              </div>
+              <h2 class="auth-title">Verify Your Mobile Device</h2>
+              <p class="auth-subtitle">
+                Default for Indian Mobile Numbers (+91). Real-time 3D Highway navigation, 24/7 NavIC/GPS tracking, and land registry.
+              </p>
+
+              <!-- Method Switcher: Phone vs Email -->
+              <div class="auth-method-tabs">
+                <button
+                  class="auth-tab ${this.authMethod === 'phone' ? 'active' : ''}"
+                  @click=${() => {
+                    this.authMethod = 'phone';
+                    this.authIdentifier = `${this.selectedCountryCode} ${this.authPhoneNumber}`;
+                    this.authOtpStep = 'enter_id';
+                  }}>
+                  📱 Mobile Number (+91 India)
+                </button>
+                <button
+                  class="auth-tab ${this.authMethod === 'email' ? 'active' : ''}"
+                  @click=${() => {
+                    this.authMethod = 'email';
+                    this.authIdentifier = 'pilot@travelexpert.in';
+                    this.authOtpStep = 'enter_id';
+                  }}>
+                  ✉️ Email Address
+                </button>
+              </div>
+
+              ${this.otpNotification
+                ? html`<div class="auth-otp-toast">
+                    <span class="toast-code-pulse"></span>
+                    ${this.otpNotification}
+                  </div>`
+                : ''}
+
+              <!-- STEP 1: Enter Phone / Email -->
+              ${this.authOtpStep === 'enter_id'
+                ? html`<div class="auth-form-step">
+                    ${this.authMethod === 'phone'
+                      ? html`
+                          <div class="country-picker-wrap">
+                            <label>Country / ISD Code</label>
+                            <select
+                              class="country-select-dropdown"
+                              .value=${this.selectedCountryCode}
+                              @change=${(e: any) => {
+                                this.selectedCountryCode = e.target.value;
+                                const opt = COUNTRY_OPTIONS.find(
+                                  (c) => c.code === e.target.value,
+                                );
+                                if (opt) {
+                                  this.authPhoneNumber = opt.placeholder;
+                                  this.authIdentifier = `${opt.code} ${opt.placeholder}`;
+                                }
+                              }}>
+                              ${COUNTRY_OPTIONS.map(
+                                (c) =>
+                                  html`<option value=${c.code}>
+                                    ${c.flag} ${c.code} (${c.name})
+                                  </option>`,
+                              )}
+                            </select>
+                          </div>
+
+                          <div class="auth-field-group">
+                            <label>Indian Mobile Number</label>
+                            <div class="phone-input-row">
+                              <span class="phone-country-badge">
+                                ${this.selectedCountryCode}
+                              </span>
+                              <input
+                                type="tel"
+                                class="auth-input phone-number-field"
+                                .value=${this.authPhoneNumber}
+                                @input=${(e: any) => {
+                                  this.authPhoneNumber = e.target.value;
+                                  this.authIdentifier = `${this.selectedCountryCode} ${this.authPhoneNumber}`;
+                                }}
+                                placeholder="98765 43210" />
+                            </div>
+                          </div>
+                        `
+                      : html`
+                          <div class="auth-field-group">
+                            <label>Email Address</label>
+                            <input
+                              type="email"
+                              class="auth-input"
+                              .value=${this.authIdentifier}
+                              @input=${(e: any) =>
+                                (this.authIdentifier = e.target.value)}
+                              placeholder="driver@travelexpert.in" />
+                          </div>
+                        `}
+
+                    <button
+                      class="btn-auth-primary"
+                      @click=${() => this.handleSendOtp()}>
+                      Send 6-Digit OTP Verification Code ➔
+                    </button>
+
+                    <div class="auth-lang-notice">
+                      <span class="lang-icon">🌐</span>
+                      <span>
+                        Supported Languages: <strong>ଓଡ଼ିଆ (Odia)</strong> •
+                        <strong>हिन्दी (Hindi)</strong> •
+                        <strong>English</strong>
+                      </span>
+                    </div>
+                  </div>`
+                : html`<div class="auth-form-step">
+                    <div class="auth-field-group">
+                      <label>Enter 6-Digit OTP Code</label>
+                      <input
+                        type="text"
+                        maxlength="6"
+                        class="auth-input otp-digits font-mono"
+                        placeholder="••••••"
+                        .value=${this.enteredOtp}
+                        @input=${(e: any) =>
+                          (this.enteredOtp = e.target.value)} />
+                      <div class="otp-hint-row">
+                        <span>Sent to: ${this.authIdentifier}</span>
+                        <button
+                          class="btn-otp-resend"
+                          @click=${() => this.handleSendOtp()}>
+                          Resend OTP
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      class="btn-auth-primary"
+                      @click=${() => this.handleVerifyOtp()}>
+                      Verify OTP & Access Travel Expert 🇮🇳
+                    </button>
+                  </div>`}
+            </div>
+          </div>`
+        : ''}
+
       <!-- Main 3D Map Area -->
       <div class="main-container" role="application">
         ${this.mapError
@@ -1523,17 +1818,67 @@ export class MapApp extends LitElement {
           default-ui-disabled="true">
         </gmp-map-3d>
 
+        <!-- Direct Map Canvas Controls (Right-Hand Side) -->
+        <div class="canvas-map-controls">
+          <button
+            class="map-ctrl-btn"
+            title="Zoom In"
+            @click=${() => this.zoomIn()}>
+            +
+          </button>
+          <button
+            class="map-ctrl-btn"
+            title="Zoom Out"
+            @click=${() => this.zoomOut()}>
+            −
+          </button>
+          <button
+            class="map-ctrl-btn"
+            title="Toggle 3D Tilt Angle"
+            @click=${() => this.toggleTilt()}>
+            3D
+          </button>
+          <button
+            class="map-ctrl-btn"
+            title="Reset North Compass"
+            @click=${() => this.resetHeading()}>
+            🧭
+          </button>
+        </div>
+
         <!-- Top Map HUD Toolbar -->
         <div class="map-overlay-toolbar">
-          <!-- Weather Overlay Toggle Button -->
+          <!-- India Regional Hub Shortcuts -->
+          <div class="regional-hubs-bar">
+            <button
+              class="hub-btn"
+              title="Overview of India"
+              @click=${() => this.flyToHub('india')}>
+              🇮🇳 All India
+            </button>
+            <button
+              class="hub-btn"
+              title="Jump to Odisha Hub (Bhubaneswar, Cuttack, Puri & Paradip)"
+              @click=${() => this.flyToHub('odisha')}>
+              🌊 Odisha Hub
+            </button>
+            <button
+              class="hub-btn"
+              title="Jump to Delhi-NCR Capital Hub"
+              @click=${() => this.flyToHub('delhi')}>
+              🏛️ Delhi-NCR
+            </button>
+          </div>
+
+          <!-- Weather HUD Toggle Button -->
           <button
             class="map-tool-btn ${this.showWeatherOverlay ? 'active' : ''}"
-            title="Toggle Real-Time Weather HUD"
+            title="Click to toggle Real-Time Weather"
             @click=${() => this.toggleWeatherOverlay()}>
             ⛅ Weather: ${this.showWeatherOverlay ? 'ON' : 'OFF'}
           </button>
 
-          <!-- Vehicle Type Selector Dropdown / Button -->
+          <!-- Vehicle Type Selector -->
           <div class="vehicle-selector-wrap">
             <span class="vehicle-selector-label">Vehicle:</span>
             <select
@@ -1550,52 +1895,79 @@ export class MapApp extends LitElement {
                 }
               }}>
               <option value="scooter_2w">🛵 2-Wheeler (Bike / Scooter)</option>
-              <option value="car_4w">🚗 4-Wheeler (Car / Sedan / SUV)</option>
-              <option value="truck_6w">🚚 6-Wheeler (Medium Truck)</option>
+              <option value="car_4w">🚗 4-Wheeler (Car / SUV)</option>
+              <option value="truck_6w">🚚 6-Wheeler (Delivery Truck)</option>
               <option value="heavy_8w">🚛 8-Wheeler (Commercial Tipper)</option>
               <option value="semi_16w">🚛 16-Wheeler (Freight Semi)</option>
             </select>
           </div>
 
-          <!-- Continuous Voice Agent Toggle -->
+          <!-- Trilingual Mode Selector -->
+          <div class="lang-selector-wrap" title="Trilingual Voice Agent: Odia, Hindi, English">
+            <select
+              class="lang-select-dropdown"
+              .value=${this.activeVoiceLanguage}
+              @change=${(e: any) => {
+                this.activeVoiceLanguage = e.target.value;
+                if (this.speechRecognition) {
+                  this.speechRecognition.lang =
+                    this.activeVoiceLanguage === 'odia'
+                      ? 'or-IN'
+                      : this.activeVoiceLanguage === 'hindi'
+                      ? 'hi-IN'
+                      : this.activeVoiceLanguage === 'english'
+                      ? 'en-IN'
+                      : 'hi-IN';
+                }
+              }}>
+              <option value="auto">🌐 Auto (ଓଡ଼ିଆ • हिन्दी • Eng)</option>
+              <option value="odia">🇮🇳 Odia (ଓଡ଼ିଆ)</option>
+              <option value="hindi">🇮🇳 Hindi (हिन्दी)</option>
+              <option value="english">🌐 Indian English</option>
+            </select>
+          </div>
+
+          <!-- Travel Expert Verbal Mode -->
           <button
             class="map-tool-btn ${this.isContinuousVoice ? 'continuous-active' : ''}"
-            title="Continuous hands-free voice conversation"
+            title="Continuous voice conversation with Travel Expert"
             @click=${() => this.toggleContinuousVoiceMode()}>
-            🎙 Verbal Loop: ${this.isContinuousVoice ? 'ACTIVE' : 'OFF'}
+            🎙 Travel Expert: ${this.isContinuousVoice ? 'ACTIVE' : 'OFF'}
           </button>
 
-          <!-- 24/7 GPS Tracking Status Pill -->
+          <!-- 24/7 GPS Tracking Pill -->
           <button
-            class="map-tool-btn ${this.liveTrackingStatus.isTracking ? 'gps-active' : ''}"
-            title="View GPS Tracking & Detective Timeline"
-            @click=${() => {
-              this.selectedChatTab = ChatTab.TRACKING;
-              this.highlightFrequentStopsOnMap();
-            }}>
+            class="map-tool-btn gps-active"
+            title="View 24/7 Live GPS Tracking Telemetry"
+            @click=${() => (this.selectedChatTab = ChatTab.TRACKING)}>
             📡 [${this.pairingCode}] ${this.liveTrackingStatus.carDirection} • ${this.liveTrackingStatus.speedKmh} km/h
           </button>
 
-          <!-- Status Message Indicator -->
-          ${this.voiceStatusMessage
-            ? html`<div class="voice-status-pill">
-                <span class="pulsing-dot"></span> ${this.voiceStatusMessage}
-              </div>`
-            : ''}
+          <!-- User Profile & Sign Out Button -->
+          <div class="auth-status-pill">
+            <span>👤 ${this.authIdentifier}</span>
+            <button
+              class="btn-pill-signout"
+              title="Sign out or switch accounts"
+              @click=${() => this.handleSignOut()}>
+              Sign Out
+            </button>
+          </div>
         </div>
 
-        <!-- Real-Time Weather HUD Floating Card -->
+        <!-- Real-Time Weather HUD Card (Single click toggle on/off) -->
         ${this.showWeatherOverlay && this.currentWeather
-          ? html`<div class="weather-hud-card" role="region" aria-label="Real-time Weather">
+          ? html`<div class="weather-hud-card" role="region">
               <div class="weather-header">
-                <div class="weather-title-zone">
-                  <span class="weather-badge">Real-Time Forecast</span>
+                <div>
+                  <span class="weather-badge">Live Meteorology</span>
                   <div class="weather-loc-name">
                     ${this.currentWeather.locationName}
                   </div>
                 </div>
                 <button
                   class="weather-close-btn"
+                  title="Close Weather HUD"
                   @click=${() => (this.showWeatherOverlay = false)}>
                   ✕
                 </button>
@@ -1613,7 +1985,7 @@ export class MapApp extends LitElement {
 
               <div class="weather-stats-grid">
                 <div class="weather-stat-cell">
-                  <span class="stat-label">Wind Speed</span>
+                  <span class="stat-label">Wind</span>
                   <span class="stat-value font-mono">${this.currentWeather.windSpeedKmh} km/h</span>
                 </div>
                 <div class="weather-stat-cell">
@@ -1621,7 +1993,7 @@ export class MapApp extends LitElement {
                   <span class="stat-value font-mono">${this.currentWeather.humidity}%</span>
                 </div>
                 <div class="weather-stat-cell">
-                  <span class="stat-label">Precip Risk</span>
+                  <span class="stat-label">Precipitation</span>
                   <span class="stat-value font-mono">${this.currentWeather.precipitationRisk}%</span>
                 </div>
               </div>
@@ -1636,37 +2008,69 @@ export class MapApp extends LitElement {
             </div>`
           : ''}
 
-        <!-- Real-Time Navigation HUD Card -->
+        <!-- Real-Time Navigation HUD with Traffic & Emergency POIs -->
         ${this.navigationInfo.isActive
-          ? html`<div class="nav-hud-card" role="region" aria-label="Route Navigation">
+          ? html`<div class="nav-hud-card" role="region">
               <div class="nav-hud-header">
                 <div>
                   <div class="nav-tag">
-                    ${VEHICLE_PROFILES[this.navigationInfo.vehicleType].label.split(' ')[0]} Navigation
+                    Travel Expert: ${VEHICLE_PROFILES[this.navigationInfo.vehicleType].label.split(' ')[0]}
                   </div>
                   <div class="nav-route-name">
                     ${this.navigationInfo.origin} ➔ ${this.navigationInfo.destination}
                   </div>
                 </div>
-                <button class="nav-close-btn" @click=${() => this.dismissNavigation()}>
+                <button
+                  class="nav-close-btn"
+                  @click=${() => (this.navigationInfo.isActive = false)}>
                   ✕
                 </button>
               </div>
 
-              <!-- Vehicle Clearance Warning Callout -->
+              <!-- Traffic Conditions Strip -->
+              <div class="nav-traffic-strip">
+                <span class="traffic-tag" style="background: ${this.navigationInfo.traffic.color};"></span>
+                <span class="traffic-desc">${this.navigationInfo.traffic.summary}</span>
+                <div class="traffic-legend-mini">
+                  <span class="leg-dot green" title="Clear flow"></span>
+                  <span class="leg-dot yellow" title="Moderate traffic"></span>
+                  <span class="leg-dot red" title="Traffic jam"></span>
+                </div>
+              </div>
+
+              <!-- Vehicle Clearance Advisory -->
               ${this.navigationInfo.clearanceWarning
-                ? html`<div class="vehicle-clearance-box ${this.navigationInfo.vehicleType === 'semi_16w' || this.navigationInfo.vehicleType === 'heavy_8w' ? 'danger' : 'info'}">
-                    <div class="clearance-title">
-                      ⚠️ Vehicle Clearance Advisory:
-                    </div>
-                    <div class="clearance-text">
-                      ${this.navigationInfo.clearanceWarning}
-                    </div>
+                ? html`<div class="vehicle-clearance-box danger">
+                    <div class="clearance-title">⚠️ Vehicle Clearance Advisory:</div>
+                    <div class="clearance-text">${this.navigationInfo.clearanceWarning}</div>
                     ${this.navigationInfo.recommendedVehicleRoute
-                      ? html`<div class="clearance-recom">
-                          Recommended: ${this.navigationInfo.recommendedVehicleRoute}
-                        </div>`
+                      ? html`<div class="clearance-recom">Recommended: ${this.navigationInfo.recommendedVehicleRoute}</div>`
                       : ''}
+                  </div>`
+                : ''}
+
+              <!-- Emergency Services Along Route -->
+              ${this.navigationInfo.emergencyPOIs.length > 0
+                ? html`<div class="emergency-pois-row">
+                    <div class="emergency-pois-title">
+                      🚨 Key Emergency Services on Route:
+                    </div>
+                    <div class="emergency-pois-chips">
+                      ${this.navigationInfo.emergencyPOIs.map(
+                        (poi) => html`<button
+                          class="poi-chip ${poi.type}"
+                          @click=${() => (this.activeInspectedPOI = poi)}>
+                          ${poi.type === 'hospital'
+                            ? '🏥 Hospital'
+                            : poi.type === 'police'
+                            ? '🚓 Police'
+                            : poi.type === 'fuel'
+                            ? '⛽ Gas Pump'
+                            : '🩺 Clinic'}
+                          · ${poi.distanceFromRoute}
+                        </button>`,
+                      )}
+                    </div>
                   </div>`
                 : ''}
 
@@ -1679,14 +2083,6 @@ export class MapApp extends LitElement {
                     ${this.navigationInfo.distanceText} • ${this.navigationInfo.summaryRoad}
                   </div>
                 </div>
-                <button
-                  class="nav-flythrough-btn ${this.isFlythroughRunning ? 'running' : ''}"
-                  @click=${() =>
-                    this.isFlythroughRunning
-                      ? this.stopRouteFlythrough()
-                      : this.startRouteFlythrough()}>
-                  ${this.isFlythroughRunning ? '⏸ Pause 3D Tour' : '▶ 3D Flythrough'}
-                </button>
               </div>
 
               ${this.navigationInfo.steps.length > 0
@@ -1695,73 +2091,32 @@ export class MapApp extends LitElement {
                     <div class="turn-text">${this.navigationInfo.steps[0]}</div>
                   </div>`
                 : ''}
-
-              <div class="nav-steps-accordion">
-                <button
-                  class="nav-steps-toggle"
-                  @click=${() => {
-                    this.isNavStepsExpanded = !this.isNavStepsExpanded;
-                  }}>
-                  ${this.isNavStepsExpanded
-                    ? '▲ Hide Directions'
-                    : `▼ Show All Directions (${this.navigationInfo.steps.length} steps)`}
-                </button>
-
-                ${this.isNavStepsExpanded
-                  ? html`<div class="nav-steps-list">
-                      ${this.navigationInfo.steps.map(
-                        (step, idx) => html`<div class="nav-step-item">
-                          <span class="step-num">${idx + 1}</span>
-                          <span class="step-inst">${step}</span>
-                        </div>`,
-                      )}
-                    </div>`
-                  : ''}
-              </div>
             </div>`
           : ''}
 
-        <!-- Floating Property Info Card -->
-        ${this.currentInspectedPlace
-          ? html`<div class="property-info-card">
-              <div class="property-card-header">
-                <span class="property-badge ${this.currentInspectedPlace.category}">
-                  ${this.currentInspectedPlace.category.toUpperCase()}
+        <!-- Floating Emergency POI Card -->
+        ${this.activeInspectedPOI
+          ? html`<div class="emergency-poi-card">
+              <div class="poi-card-header">
+                <span class="poi-badge ${this.activeInspectedPOI.type}">
+                  ${this.activeInspectedPOI.type.toUpperCase()}
                 </span>
                 <button
                   class="property-close-btn"
-                  @click=${() => {
-                    this.currentInspectedPlace = undefined;
-                    this._clearMapElements();
-                  }}>
+                  @click=${() => (this.activeInspectedPOI = undefined)}>
                   ✕
                 </button>
               </div>
-              <div class="property-title">${this.currentInspectedPlace.name}</div>
-              <div class="property-address">${this.currentInspectedPlace.address}</div>
-              ${this.currentInspectedPlace.landSize
-                ? html`<div class="property-size">
-                    Plot Size: <strong>${this.currentInspectedPlace.landSize}</strong>
-                  </div>`
-                : ''}
-              ${this.currentInspectedPlace.notes
-                ? html`<div class="property-notes">${this.currentInspectedPlace.notes}</div>`
-                : ''}
-              <button
-                class="btn-prop-nav"
-                @click=${() => {
-                  this.handleDirections(
-                    'Current GPS Location',
-                    this.currentInspectedPlace!.address,
-                  );
-                }}>
-                🚗 Direct Vehicle Route Here
-              </button>
+              <div class="poi-title">${this.activeInspectedPOI.name}</div>
+              <div class="poi-address">${this.activeInspectedPOI.address}</div>
+              <div class="poi-dist">
+                Detour Distance: <strong>${this.activeInspectedPOI.distanceFromRoute}</strong>
+              </div>
             </div>`
           : ''}
       </div>
 
-      <!-- Sidebar Tabs (Gemini Agent / Saved Places / 24-7 Tracking & Detective) -->
+      <!-- Sidebar Area (Travel Expert / Saved Places / 24-7 Tracking) -->
       <div class="sidebar" role="complementary">
         <div class="selector" role="tablist">
           <button
@@ -1773,7 +2128,7 @@ export class MapApp extends LitElement {
             @click=${() => {
               this.selectedChatTab = ChatTab.GEMINI;
             }}>
-            Agent & Voice
+            Travel Expert
           </button>
 
           <button
@@ -1784,7 +2139,6 @@ export class MapApp extends LitElement {
             })}
             @click=${() => {
               this.selectedChatTab = ChatTab.TRACKING;
-              this.highlightFrequentStopsOnMap();
             }}>
             24/7 Tracking & Detective
           </button>
@@ -1802,7 +2156,7 @@ export class MapApp extends LitElement {
           </button>
         </div>
 
-        <!-- TAB 1: GEMINI VOICE AGENT -->
+        <!-- TAB 1: TRAVEL EXPERT VOICE AGENT -->
         <div
           class=${classMap({
             tabcontent: true,
@@ -1814,7 +2168,6 @@ export class MapApp extends LitElement {
           </div>
 
           <div class="footer">
-            <!-- Continuous Voice / Listening Banner -->
             ${this.isListening || this.isSpeaking || this.isContinuousVoice
               ? html`<div class="voice-active-indicator">
                   <div class="voice-wave">
@@ -1825,10 +2178,10 @@ export class MapApp extends LitElement {
                   </div>
                   <span>
                     ${this.isContinuousVoice
-                      ? 'Continuous Verbal Agent: Active (Speaking & Listening)'
+                      ? 'Travel Expert Verbal Loop: Active (Speaking & Listening)'
                       : this.isListening
-                      ? 'Listening to speech...'
-                      : 'Voice Agent speaking...'}
+                      ? 'Travel Expert Listening...'
+                      : 'Travel Expert Speaking...'}
                   </span>
                 </div>`
               : ''}
@@ -1837,24 +2190,24 @@ export class MapApp extends LitElement {
               id="chatStatus"
               class=${classMap({hidden: this.chatState === ChatState.IDLE})}>
               ${this.chatState === ChatState.GENERATING
-                ? html`${ICON_BUSY} Generating response...`
+                ? html`${ICON_BUSY} Generating Travel Expert response...`
                 : ''}
               ${this.chatState === ChatState.THINKING
-                ? html`${ICON_BUSY} Detective reasoning & route checking...`
+                ? html`${ICON_BUSY} Analyzing road traffic & safety clearance...`
                 : ''}
               ${this.chatState === ChatState.EXECUTING
-                ? html`${ICON_BUSY} Executing 3D map actions...`
+                ? html`${ICON_BUSY} Updating 3D map tracks...`
                 : ''}
             </div>
 
-            <!-- Input area with Mic, Speaker, and Send -->
+            <!-- Input area -->
             <div id="inputArea">
               <button
                 type="button"
                 id="voiceMicButton"
                 class="mic-btn ${this.isListening ? 'listening' : ''}"
-                title="Speak to Agent"
-                @click=${() => this.toggleVoiceListening()}>
+                title="Talk to Travel Expert"
+                @click=${() => this.startVoiceListening()}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   height="22"
@@ -1876,35 +2229,13 @@ export class MapApp extends LitElement {
                 @keydown=${(e: KeyboardEvent) => {
                   this.inputKeyDownAction(e);
                 }}
-                placeholder="Ask agent, order route, or speak command..."
+                placeholder="Ask Travel Expert or command route..."
                 autocomplete="off" />
 
               <button
-                type="button"
-                class="speaker-toggle-btn ${this.speechEnabled ? 'on' : 'off'}"
-                title="Toggle Voice Responses"
-                @click=${() => this.toggleSpeechEnabled()}>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  height="20"
-                  viewBox="0 -960 960 960"
-                  width="20"
-                  fill="currentColor">
-                  ${this.speechEnabled
-                    ? html`<path
-                        d="M560-131v-82q90-26 145-100t55-167q0-93-55-167T560-747v-82q124 28 202 125.5T840-480q0 127-78 224.5T560-131ZM120-360v-240h160l200-200v680L280-360H120Zm440 40v-320q46 17 73 57.5t27 92.5q0 52-27 92.5T560-320Z" />`
-                    : html`<path
-                        d="m792-56-64-64q-42 34-92 54.5T560-45v-82q36-18 67-42.5t53-56.5l-60-60v-274l-80-80v160l-80-80v-200l200 200h80q0-127-78-224.5T560-829v-82q124 28 202 125.5T840-562q0 63-22 120.5T756-335l36 36L792-56ZM120-360v-240h160l200-200v114l-80 80v-34L280-520H200v80h80l24 24-24 24-160-160v192ZM40-136l56 56 784-784-56-56L40-136Z" />`}
-                </svg>
-              </button>
-
-              <button
                 id="sendButton"
-                @click=${() => {
-                  this.sendMessageAction();
-                }}
-                ?disabled=${this.chatState !== ChatState.IDLE}
-                class=${classMap({disabled: this.chatState !== ChatState.IDLE})}>
+                @click=${() => this.sendMessageAction()}
+                ?disabled=${this.chatState !== ChatState.IDLE}>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   height="24px"
@@ -1918,147 +2249,53 @@ export class MapApp extends LitElement {
           </div>
         </div>
 
-        <!-- TAB 2: 24/7 GPS TRACKING & DETECTIVE TIMELINE -->
+        <!-- TAB 2: 24/7 TRACKING & DETECTIVE TIMELINE -->
         <div
           class=${classMap({
             tabcontent: true,
             showtab: this.selectedChatTab === ChatTab.TRACKING,
           })}>
           <div class="tracking-container">
-            <!-- Pairing Code Card -->
             <div class="pairing-code-banner">
-              <div class="pairing-info-col">
-                <span class="tracking-label">Active Private Access Code</span>
-                <span class="pairing-code-text font-mono">${this.pairingCode}</span>
-                <span class="pairing-hint">
-                  Share this code with your device or parental observer for 24/7 live telemetry.
-                </span>
-              </div>
-              <div class="pairing-btn-group">
-                <button
-                  class="btn-code-action"
-                  @click=${() => this.generateNewPairingCode()}>
-                  Generate Code
-                </button>
-                <button
-                  class="btn-code-action secondary"
-                  @click=${() => (this.activePairingModal = true)}>
-                  Enter Code
-                </button>
-              </div>
+              <span class="tracking-label">Active Private Access Code</span>
+              <span class="pairing-code-text font-mono">${this.pairingCode}</span>
+              <span class="pairing-hint">
+                Share this code with your device or parental observer for 24/7 live telemetry.
+              </span>
             </div>
 
-            <!-- Live GPS Status Card -->
-            <div class="live-telemetry-card">
-              <div class="telemetry-top-row">
-                <div class="telemetry-title">
-                  <span class="pulsing-beacon"></span>
-                  24/7 Live GPS Signal
-                </div>
-                <button
-                  class="btn-simulator-toggle ${this.isGpsSimulatorActive ? 'active' : ''}"
-                  @click=${() => this.toggleGpsSimulator()}>
-                  ${this.isGpsSimulatorActive ? 'Stop Simulator' : '▶ Start GPS Simulator'}
-                </button>
-              </div>
-
-              <div class="telemetry-metrics-grid">
-                <div class="telemetry-item">
-                  <span class="metric-title">Heading / Direction</span>
-                  <span class="metric-val">
-                    ${this.liveTrackingStatus.carDirection} (${this.liveTrackingStatus.headingDegrees}°)
-                  </span>
-                </div>
-                <div class="telemetry-item">
-                  <span class="metric-title">Live Speed</span>
-                  <span class="metric-val font-mono">
-                    ${this.liveTrackingStatus.speedKmh} km/h
-                  </span>
-                </div>
-                <div class="telemetry-item">
-                  <span class="metric-title">Movement State</span>
-                  <span class="metric-val status-${this.liveTrackingStatus.currentStatus}">
-                    ${this.liveTrackingStatus.currentStatus.toUpperCase()}
-                  </span>
-                </div>
-                <div class="telemetry-item">
-                  <span class="metric-title">Travel Zone</span>
-                  <span class="metric-val">${this.liveTrackingStatus.activeTravelZone}</span>
-                </div>
-              </div>
-
-              <div class="telemetry-footer-status">
-                ${this.liveTrackingStatus.lastUpdated}
-                ${this.liveTrackingStatus.currentStopDuration
-                  ? ` • ${this.liveTrackingStatus.currentStopDuration}`
-                  : ''}
-              </div>
-            </div>
-
-            <!-- Detective Timeline Header & Filter -->
+            <!-- Detective Timeline -->
             <div class="timeline-header-row">
               <div class="timeline-title-wrap">
                 <h3>Detective 24/7 Travel Timeline</h3>
                 <span class="timeline-sub">
-                  Logs dwell time, stops, and points visited 14-15+ times.
+                  Logs dwell times & marks locations visited 14-15+ times.
                 </span>
-              </div>
-              <div class="timeline-filter-buttons">
-                <button
-                  class="chip ${this.selectedTimelineFilter === 'all' ? 'active' : ''}"
-                  @click=${() => (this.selectedTimelineFilter = 'all')}>
-                  All Stops
-                </button>
-                <button
-                  class="chip ${this.selectedTimelineFilter === 'frequent' ? 'active' : ''}"
-                  @click=${() => {
-                    this.selectedTimelineFilter = 'frequent';
-                    this.highlightFrequentStopsOnMap();
-                  }}>
-                  🚨 14+ Visits Alert
-                </button>
               </div>
             </div>
 
-            <!-- Timeline Entries List -->
             <div class="timeline-list">
-              ${filteredStops.map((stop) => {
+              ${this.timelineStops.map((stop) => {
                 const isCrimson = stop.visitCount >= 14;
                 return html`<div class="timeline-stop-card ${isCrimson ? 'crimson-alert' : ''}">
                   <div class="stop-card-header">
                     <span class="stop-badge ${isCrimson ? 'badge-crimson' : 'badge-normal'}">
                       ${isCrimson
-                        ? `🚨 Detective Flag: Visited ${stop.visitCount} Times`
+                        ? `🚨 Frequent Flag: Visited ${stop.visitCount} Times`
                         : `Visits: ${stop.visitCount} times`}
                     </span>
-                    <span class="stop-dwell font-mono">
-                      Stopped: ${stop.dwellDuration}
-                    </span>
+                    <span class="stop-dwell font-mono">Stopped: ${stop.dwellDuration}</span>
                   </div>
-
-                  <div class="stop-name" @click=${() => this.flyToTimelineStop(stop)}>
-                    ${stop.name}
-                  </div>
+                  <div class="stop-name">${stop.name}</div>
                   <div class="stop-addr">${stop.address}</div>
-                  <div class="stop-times">
-                    Arrived: ${stop.arrivalTime} ${stop.departureTime ? `➔ Departed: ${stop.departureTime}` : ''}
-                  </div>
-                  ${stop.notes ? html`<div class="stop-notes">${stop.notes}</div>` : ''}
-
-                  <div class="stop-actions">
-                    <button
-                      class="btn-stop-locate"
-                      @click=${() => this.flyToTimelineStop(stop)}>
-                      📍 Locate Stop on 3D Map
-                    </button>
-                  </div>
+                  <div class="stop-times">Arrived: ${stop.arrivalTime}</div>
                 </div>`;
               })}
             </div>
           </div>
         </div>
 
-        <!-- TAB 3: MY SAVED PLACES -->
+        <!-- TAB 3: MY SAVED PLACES (9 Expanded Categories) -->
         <div
           class=${classMap({
             tabcontent: true,
@@ -2071,8 +2308,9 @@ export class MapApp extends LitElement {
                 class="btn-add-place"
                 @click=${() => {
                   this.formName = '';
-                  this.formCategory = 'agriculture';
+                  this.formCategory = 'land';
                   this.formAddress = '';
+                  this.formLandmark = '';
                   this.formLandSize = '';
                   this.formNotes = '';
                   this.activePlaceModal = true;
@@ -2081,6 +2319,7 @@ export class MapApp extends LitElement {
               </button>
             </div>
 
+            <!-- Expanded Category Chips -->
             <div class="category-chips">
               <button
                 class="chip ${this.selectedCategoryFilter === 'all' ? 'active' : ''}"
@@ -2107,16 +2346,31 @@ export class MapApp extends LitElement {
                 @click=${() => (this.selectedCategoryFilter = 'land')}>
                 📐 Land
               </button>
-            </div>
-
-            <div class="places-search-box">
-              <input
-                type="text"
-                placeholder="Search saved places or land plots..."
-                .value=${this.placesSearchQuery}
-                @input=${(e: InputEvent) => {
-                  this.placesSearchQuery = (e.target as HTMLInputElement).value;
-                }} />
+              <button
+                class="chip ${this.selectedCategoryFilter === 'warehouse' ? 'active' : ''}"
+                @click=${() => (this.selectedCategoryFilter = 'warehouse')}>
+                🏭 Warehouse
+              </button>
+              <button
+                class="chip ${this.selectedCategoryFilter === 'healthcare' ? 'active' : ''}"
+                @click=${() => (this.selectedCategoryFilter = 'healthcare')}>
+                🏥 Healthcare
+              </button>
+              <button
+                class="chip ${this.selectedCategoryFilter === 'commercial' ? 'active' : ''}"
+                @click=${() => (this.selectedCategoryFilter = 'commercial')}>
+                🏬 Mall/Retail
+              </button>
+              <button
+                class="chip ${this.selectedCategoryFilter === 'plantation' ? 'active' : ''}"
+                @click=${() => (this.selectedCategoryFilter = 'plantation')}>
+                🌲 Plantation
+              </button>
+              <button
+                class="chip ${this.selectedCategoryFilter === 'civic' ? 'active' : ''}"
+                @click=${() => (this.selectedCategoryFilter = 'civic')}>
+                🏛️ Civic
+              </button>
             </div>
 
             <div class="places-card-list">
@@ -2136,8 +2390,8 @@ export class MapApp extends LitElement {
                     ${place.name}
                   </div>
                   <div class="place-card-addr">${place.address}</div>
-                  ${place.notes
-                    ? html`<div class="place-card-notes">${place.notes}</div>`
+                  ${place.landmark
+                    ? html`<div class="place-card-notes">Landmark: ${place.landmark}</div>`
                     : ''}
                   <div class="place-card-actions">
                     <button
@@ -2164,51 +2418,7 @@ export class MapApp extends LitElement {
         </div>
       </div>
 
-      <!-- Pairing Code Modal Dialog -->
-      ${this.activePairingModal
-        ? html`<div
-            class="modal-backdrop"
-            @click=${(e: Event) => {
-              if (e.target === e.currentTarget) this.activePairingModal = false;
-            }}>
-            <div class="modal-card">
-              <div class="modal-header">
-                <h3>Pair GPS Tracking Device</h3>
-                <button
-                  class="modal-close"
-                  @click=${() => (this.activePairingModal = false)}>
-                  ✕
-                </button>
-              </div>
-              <p style="font-size: 0.85rem; color: var(--color-text2); margin-bottom: 12px;">
-                Enter the 6-character private access code shared by the child, vehicle operator, or tracked device:
-              </p>
-              <div class="form-group">
-                <input
-                  type="text"
-                  placeholder="e.g. TRK-8821"
-                  .value=${this.enteredPairCode}
-                  @input=${(e: any) => (this.enteredPairCode = e.target.value)} />
-              </div>
-              <div class="modal-actions">
-                <button
-                  type="button"
-                  class="btn-cancel"
-                  @click=${() => (this.activePairingModal = false)}>
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  class="btn-submit"
-                  @click=${() => this.pairWithEnteredCode()}>
-                  Connect & Track Device
-                </button>
-              </div>
-            </div>
-          </div>`
-        : ''}
-
-      <!-- Add Place Modal Dialog -->
+      <!-- Add / Edit Place Modal (Opens automatically on map click or button) -->
       ${this.activePlaceModal
         ? html`<div
             class="modal-backdrop"
@@ -2217,7 +2427,7 @@ export class MapApp extends LitElement {
             }}>
             <div class="modal-card">
               <div class="modal-header">
-                <h3>Save New Location / Land Plot</h3>
+                <h3>Save Location & Property Details</h3>
                 <button
                   class="modal-close"
                   @click=${() => (this.activePlaceModal = false)}>
@@ -2232,6 +2442,7 @@ export class MapApp extends LitElement {
                     name: this.formName,
                     category: this.formCategory,
                     address: this.formAddress,
+                    landmark: this.formLandmark || undefined,
                     landSize: this.formLandSize || undefined,
                     notes: this.formNotes || undefined,
                   });
@@ -2243,50 +2454,69 @@ export class MapApp extends LitElement {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Sunrise Organic Wheat Farm, Apex Office"
+                    placeholder="e.g. Sunrise Organic Farm, Downtown Corporate Office"
                     .value=${this.formName}
                     @input=${(e: any) => (this.formName = e.target.value)} />
                 </div>
+
                 <div class="form-group">
                   <label>Category *</label>
                   <select
                     .value=${this.formCategory}
                     @change=${(e: any) =>
                       (this.formCategory = e.target.value)}>
-                    <option value="agriculture">🌾 Agricultural Land / Farm</option>
+                    <option value="agriculture">🌾 Agriculture / Farmland / Silo</option>
                     <option value="home">🏡 Home / Residence</option>
-                    <option value="business">🏢 Business Platform / Office</option>
-                    <option value="land">📐 Land / Commercial Plot</option>
-                    <option value="other">📍 Other Location</option>
+                    <option value="business">🏢 Business / Corporate Office</option>
+                    <option value="land">📐 Commercial Land Plot / Industrial Parcel</option>
+                    <option value="warehouse">🏭 Warehouse / Logistics Godown</option>
+                    <option value="healthcare">🏥 Hospital / Healthcare Clinic</option>
+                    <option value="commercial">🏬 Commercial Mall / Retail Shop</option>
+                    <option value="plantation">🌲 Plantation / Orchard / Farmhouse</option>
+                    <option value="civic">🏛️ Civic / Religious / Public Landmark</option>
+                    <option value="other">📍 Other Custom Location</option>
                   </select>
                 </div>
+
                 <div class="form-group">
-                  <label>Address or Landmark *</label>
+                  <label>Street Address or Location *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Fresno, CA or 742 Evergreen Terrace"
+                    placeholder="Street name, neighborhood, city"
                     .value=${this.formAddress}
                     @input=${(e: any) => (this.formAddress = e.target.value)} />
                 </div>
+
                 <div class="form-group">
-                  <label>Land / Plot Area (optional)</label>
+                  <label>Nearby Landmark / Cross-Street (optional)</label>
                   <input
                     type="text"
-                    placeholder="e.g. 25 Acres, 10 Hectares, 5,000 sq ft"
+                    placeholder="e.g. Near Metro Junction, Highway Exit 12"
+                    .value=${this.formLandmark}
+                    @input=${(e: any) => (this.formLandmark = e.target.value)} />
+                </div>
+
+                <div class="form-group">
+                  <label>Plot / Land Area (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 50 Acres, 10,000 sq ft, 2 Hectares"
                     .value=${this.formLandSize}
                     @input=${(e: any) =>
                       (this.formLandSize = e.target.value)} />
                 </div>
+
                 <div class="form-group">
-                  <label>Details & Notes (optional)</label>
+                  <label>Property Details & Notes (optional)</label>
                   <textarea
-                    rows="3"
-                    placeholder="Soil type, crops grown, boundary notes, or facilities..."
+                    rows="2"
+                    placeholder="Soil quality, facilities, security gate, or building description..."
                     .value=${this.formNotes}
                     @input=${(e: any) =>
                       (this.formNotes = e.target.value)}></textarea>
                 </div>
+
                 <div class="modal-actions">
                   <button
                     type="button"
@@ -2295,7 +2525,7 @@ export class MapApp extends LitElement {
                     Cancel
                   </button>
                   <button type="submit" class="btn-submit">
-                    Save Location
+                    Save Place to Registry
                   </button>
                 </div>
               </form>

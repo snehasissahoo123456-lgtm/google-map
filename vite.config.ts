@@ -14,6 +14,7 @@ export default defineConfig({
   },
   plugins: [react()],
   define: {
+    'process.env': {},
     'globalThis.process.env.GEMINI_API_KEY': JSON.stringify('server-side'),
   },
   resolve: {

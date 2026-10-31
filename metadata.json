@@ -1,6 +1,6 @@
 {
-  "name": "Remix MCP Maps 3D",
-  "description": "Build Photoreal 3D maps with natural language using a Gemini-powered Agent and MCP tool.",
+  "name": "Travel Expert - India 3D Navigation & Telematics",
+  "description": "Indian 3D navigation, 24/7 live GPS tracking, vehicle clearance routing, and trilingual voice assistant in Odia, Hindi, and English.",
   "requestFramePermissions": [],
   "prompt": "",
   "majorCapabilities": [

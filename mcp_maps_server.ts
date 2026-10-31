@@ -4,9 +4,16 @@
  */
 
 /**
- * Model Context Protocol (MCP) server for Google Maps 3D,
- * Vehicle Clearance Routing (2-wheeler to 16-wheeler),
- * 24/7 Live GPS Tracking, Detective Timeline, Weather HUD, and Saved Locations.
+ * Model Context Protocol (MCP) server for Travel Expert 3D Maps Platform.
+ * Supports:
+ * - Travel Expert Conversational Assistant
+ * - Vehicle Clearance Navigation (2-wheeler to 16-wheeler)
+ * - Real-Time Route Traffic Density (Green, Yellow, Red)
+ * - Emergency Services Along Route (Hospitals, Police, Fuel, Clinics)
+ * - 24/7 Live GPS Tracking Telemetry & Pairing Codes
+ * - Detective Timeline Analysis (14-15+ Visit Frequency)
+ * - Real-Time Weather Forecasting
+ * - Expanded Property & Land Parcel Categories
  */
 
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -19,6 +26,18 @@ export type VehicleTypeId =
   | 'truck_6w'
   | 'heavy_8w'
   | 'semi_16w';
+
+export type SavedPlaceCategory =
+  | 'agriculture'
+  | 'home'
+  | 'business'
+  | 'land'
+  | 'warehouse'
+  | 'healthcare'
+  | 'commercial'
+  | 'plantation'
+  | 'civic'
+  | 'other';
 
 export interface VehicleProfile {
   id: VehicleTypeId;
@@ -35,8 +54,9 @@ export interface VehicleProfile {
 export interface SavedPlace {
   id: string;
   name: string;
-  category: 'home' | 'business' | 'land' | 'agriculture' | 'other';
+  category: SavedPlaceCategory;
   address: string;
+  landmark?: string;
   lat?: number;
   lng?: number;
   landSize?: string;
@@ -56,6 +76,22 @@ export interface TimelineStop {
   visitCount: number;
   isHighFrequency: boolean; // 14-15+ visits
   notes?: string;
+}
+
+export interface EmergencyPOI {
+  id: string;
+  name: string;
+  type: 'hospital' | 'police' | 'fuel' | 'clinic';
+  address: string;
+  distanceFromRoute: string;
+  lat: number;
+  lng: number;
+}
+
+export interface RouteTrafficInfo {
+  status: 'low' | 'moderate' | 'heavy';
+  summary: string;
+  color: string;
 }
 
 export interface LiveGpsTrackingStatus {
@@ -97,8 +133,9 @@ export interface McpServerCallbacks {
   getSavedPlaces: () => SavedPlace[];
   savePlace: (place: {
     name: string;
-    category: 'home' | 'business' | 'land' | 'agriculture' | 'other';
+    category: SavedPlaceCategory;
     address: string;
+    landmark?: string;
     landSize?: string;
     notes?: string;
   }) => Promise<SavedPlace>;
@@ -111,6 +148,8 @@ export interface McpServerCallbacks {
     distanceText: string;
     summaryRoad: string;
     steps: string[];
+    traffic: RouteTrafficInfo;
+    emergencyPOIs: EmergencyPOI[];
     clearanceWarning?: string;
     recommendedVehicleRoute?: string;
   }>;
@@ -138,35 +177,41 @@ export async function startMcpGoogleMapServer(
             distanceText: 'Unknown',
             summaryRoad: 'Primary Route',
             steps: [],
+            traffic: {
+              status: 'low',
+              summary: 'Smooth flowing traffic (Green)',
+              color: '#10b981',
+            },
+            emergencyPOIs: [],
           }),
           getLiveTrackingStatus: () => ({
             pairedCode: 'TRK-9021',
             isTracking: false,
-            latitude: 37.7749,
-            longitude: -122.4194,
+            latitude: 20.2961,
+            longitude: 85.8245,
             speedKmh: 0,
             headingDegrees: 0,
             carDirection: 'North',
             lastUpdated: 'Just now',
-            activeTravelZone: 'Metro Zone',
+            activeTravelZone: 'Odisha & National Highway 16 Corridor',
             currentStatus: 'idle',
           }),
           getTimelineStops: () => [],
           getCurrentWeather: async () => ({
-            locationName: 'Current View',
-            temperatureC: 22,
-            temperatureF: 72,
+            locationName: 'India View (Odisha / Delhi)',
+            temperatureC: 28,
+            temperatureF: 82,
             condition: 'Clear Sky',
-            windSpeedKmh: 12,
-            humidity: 45,
+            windSpeedKmh: 10,
+            humidity: 62,
             precipitationRisk: 0,
           }),
         }
       : callbacks;
 
   const server = new McpServer({
-    name: 'AI Studio Detective Map Agent',
-    version: '2.0.0',
+    name: 'Travel Expert Map Agent',
+    version: '3.0.0',
   });
 
   // Tool 1: View Location on Map
@@ -182,10 +227,10 @@ export async function startMcpGoogleMapServer(
     },
   );
 
-  // Tool 2: Vehicle-Aware Directions on Google Maps
+  // Tool 2: Travel Expert Route Directions with Traffic & Emergency POIs
   server.tool(
     'directions_on_google_maps',
-    'Search Google Maps for driving directions tailored to vehicle types (scooter/bike 2-wheeler, car 4-wheeler, 6-wheeler truck, 8-wheeler commercial, 16-wheeler heavy freight). Checks road clearance, weight/turning restrictions, and warns about road jams.',
+    'Calculate routes with real-time traffic levels (Green/Yellow/Red), nearby emergency service POIs (Hospitals, Police, Fuel, Clinics), and vehicle-clearance safety checks (2-wheeler to 16-wheeler).',
     {
       origin: z.string().describe('Starting location or address'),
       destination: z.string().describe('Ending destination location or address'),
@@ -193,7 +238,7 @@ export async function startMcpGoogleMapServer(
         .enum(['scooter_2w', 'car_4w', 'truck_6w', 'heavy_8w', 'semi_16w'])
         .optional()
         .describe(
-          'Vehicle type: scooter_2w (bike/scooter), car_4w (car), truck_6w (6-wheeler), heavy_8w (8-wheeler), semi_16w (16-wheeler freight)',
+          'Vehicle type: scooter_2w (2-wheeler), car_4w (car), truck_6w (6-wheeler), heavy_8w (8-wheeler), semi_16w (16-wheeler freight)',
         ),
     },
     async ({origin, destination, vehicleType}) => {
@@ -209,10 +254,12 @@ export async function startMcpGoogleMapServer(
           destination,
           vehicleType,
         );
-        let routeText = `Route calculated from "${origin}" to "${destination}":
-• Estimated travel time: ${details.durationText}
-• Distance: ${details.distanceText}
-• Primary route: ${details.summaryRoad}`;
+
+        let routeText = `Travel Expert Navigation Plan: "${origin}" ➔ "${destination}":
+• Estimated Travel Time: ${details.durationText}
+• Total Distance: ${details.distanceText}
+• Primary Highway / Road: ${details.summaryRoad}
+• Traffic Condition: ${details.traffic.summary} [Traffic Color: ${details.traffic.color}]`;
 
         if (details.clearanceWarning) {
           routeText += `\n⚠️ VEHICLE CLEARANCE ALERT: ${details.clearanceWarning}`;
@@ -220,8 +267,20 @@ export async function startMcpGoogleMapServer(
         if (details.recommendedVehicleRoute) {
           routeText += `\n💡 Recommended Corridor: ${details.recommendedVehicleRoute}`;
         }
-        if (details.steps.length > 0) {
-          routeText += `\n• Guidance: ${details.steps[0]}`;
+
+        if (details.emergencyPOIs.length > 0) {
+          routeText += `\n\n🚨 Emergency & Critical Services Detected on Route:`;
+          details.emergencyPOIs.forEach((poi) => {
+            const icon =
+              poi.type === 'hospital'
+                ? '🏥'
+                : poi.type === 'police'
+                ? '🚓'
+                : poi.type === 'fuel'
+                ? '⛽'
+                : '🩺';
+            routeText += `\n• ${icon} ${poi.name} (${poi.type.toUpperCase()}): ${poi.distanceFromRoute} from route, ${poi.address}`;
+          });
         }
 
         return {
@@ -232,9 +291,7 @@ export async function startMcpGoogleMapServer(
           content: [
             {
               type: 'text',
-              text: `Navigating route from ${origin} to ${destination} for ${
-                vehicleType || 'standard vehicle'
-              }`,
+              text: `Navigating route from ${origin} to ${destination} with real-time traffic and emergency POI tracking.`,
             },
           ],
         };
@@ -242,61 +299,46 @@ export async function startMcpGoogleMapServer(
     },
   );
 
-  // Tool 3: Check Vehicle Road Clearance & Jam Hazard
+  // Tool 3: Query Emergency Services Along Route
   server.tool(
-    'check_vehicle_clearance',
-    'Analyze route road geometry, low bridge overpasses, tight turns, and road jam risks for large commercial vehicles (6-wheeler, 8-wheeler, 16-wheeler). Advises whether vehicle can pass or must use truck bypass corridors.',
+    'find_emergency_services_on_route',
+    'Locate essential emergency services (Hospitals, Police Stations, Gas/Fuel Stations, and Clinics) along the current traveling route or specific highway corridor.',
     {
       routeOrigin: z.string(),
       routeDestination: z.string(),
-      vehicleType: z
-        .enum(['scooter_2w', 'car_4w', 'truck_6w', 'heavy_8w', 'semi_16w'])
-        .describe('The vehicle type being operated'),
     },
-    async ({routeOrigin, routeDestination, vehicleType}) => {
+    async ({routeOrigin, routeDestination}) => {
       const details = await fullCallbacks.getRouteDetails(
         routeOrigin,
         routeDestination,
-        vehicleType,
       );
 
-      let advice = '';
-      if (vehicleType === 'semi_16w') {
-        advice =
-          '16-Wheeler Heavy Freight: Avoid downtown alleys, historic archways, and residential roads. Restricted turning radius (18m). Use National Highway freight corridors and expressway ring-roads.';
-      } else if (vehicleType === 'heavy_8w') {
-        advice =
-          '8-Wheeler Multi-Axle: Max load 25 tons. Avoid sub-arterial streets with low hanging utility cables or weight-restricted bridges.';
-      } else if (vehicleType === 'truck_6w') {
-        advice =
-          '6-Wheeler Medium Delivery: Suitable for major city avenues; avoid narrow market lanes during peak hours.';
-      } else if (vehicleType === 'scooter_2w') {
-        advice =
-          '2-Wheeler Scooter/Bike: Unrestricted through narrow alleys, but prohibit access onto high-speed grade-separated expressways where 2-wheelers are barred.';
-      } else {
-        advice = '4-Wheeler Car: Standard road network access permitted.';
+      if (details.emergencyPOIs.length === 0) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Scanning route from ${routeOrigin} to ${routeDestination}... Emergency stations mapped on 3D HUD.`,
+            },
+          ],
+        };
       }
 
+      let text = `Nearest Emergency Facilities along route from "${routeOrigin}" to "${routeDestination}":\n`;
+      details.emergencyPOIs.forEach((poi, idx) => {
+        text += `${idx + 1}. [${poi.type.toUpperCase()}] ${poi.name}\n   Address: ${poi.address}\n   Distance: ${poi.distanceFromRoute}\n`;
+      });
+
       return {
-        content: [
-          {
-            type: 'text',
-            text: `Vehicle Clearance Analysis [${vehicleType.toUpperCase()}]:
-Origin: ${routeOrigin} ➔ Destination: ${routeDestination}
-Clearance Status: ${details.clearanceWarning ? 'RESTRICTED / CAUTION' : 'CLEAR PASS'}
-${details.clearanceWarning ? `Warning: ${details.clearanceWarning}\n` : ''}
-Advice: ${advice}
-Estimated Duration: ${details.durationText} via ${details.summaryRoad}`,
-          },
-        ],
+        content: [{type: 'text', text}],
       };
     },
   );
 
-  // Tool 4: 24/7 Live GPS Tracking & Direction Status
+  // Tool 4: 24/7 Live GPS Tracking
   server.tool(
     'query_live_gps_tracking',
-    'Get real-time 24/7 GPS tracking telemetry of the paired device: current coordinates, speed (km/h), car heading direction (N, NE, S, etc.), movement status (moving/stopped), and current active travel zone.',
+    'Get real-time 24/7 GPS tracking telemetry of the paired device: coordinates, speed (km/h), car direction heading, and movement status.',
     {},
     async () => {
       const status = fullCallbacks.getLiveTrackingStatus();
@@ -309,29 +351,24 @@ Estimated Duration: ${details.durationText} via ${details.summaryRoad}`,
         content: [
           {
             type: 'text',
-            text: `24/7 Live GPS Tracking Telemetry [Code: ${status.pairedCode}]:
-• Device Status: ${status.currentStatus.toUpperCase()}
-• Car Direction & Heading: ${status.carDirection} (${status.headingDegrees}°)
-• Live Speed: ${status.speedKmh} km/h
+            text: `24/7 Live GPS Telemetry [Access Code: ${status.pairedCode}]:
+• Movement: ${status.currentStatus.toUpperCase()}
+• Direction / Heading: ${status.carDirection} (${status.headingDegrees}°)
+• Current Speed: ${status.speedKmh} km/h
 • Coordinates: ${status.latitude.toFixed(5)}, ${status.longitude.toFixed(5)}
 • Active Travel Zone: ${status.activeTravelZone}
-• Last Signal: ${status.lastUpdated}
-${
-  status.currentStopDuration
-    ? `• Current Stopped Dwell Time: ${status.currentStopDuration}`
-    : ''
-}
-The 3D map camera is now focused on the live GPS beacon.`,
+• Last GPS Sync: ${status.lastUpdated}
+${status.currentStopDuration ? `• Dwell Time: ${status.currentStopDuration}` : ''}`,
           },
         ],
       };
     },
   );
 
-  // Tool 5: Detective Timeline & Frequent Stop Analysis (14-15+ visits)
+  // Tool 5: Detective Timeline Analysis (14-15+ visits)
   server.tool(
     'query_detective_timeline',
-    'Examine 24/7 travel timeline history: where the person or vehicle traveled, stopped locations, duration spent in each place, and identify points visited repeatedly (14-15+ times) marked with detective frequency colors.',
+    'Examine 24/7 travel timeline history: where the person or vehicle traveled, stopped locations, duration spent, and points visited 14-15+ times marked with crimson detective alert.',
     {},
     async () => {
       const stops = fullCallbacks.getTimelineStops();
@@ -340,31 +377,25 @@ The 3D map camera is now focused on the live GPS beacon.`,
           content: [
             {
               type: 'text',
-              text: 'No recorded stops in the timeline yet. GPS tracking is active and will log dwell intervals automatically as stops occur.',
+              text: 'No recorded stops in the timeline yet. GPS tracking is active and logging dwell intervals.',
             },
           ],
         };
       }
 
       const highFreq = stops.filter((s) => s.visitCount >= 14);
-      const regular = stops.filter((s) => s.visitCount < 14);
-
       let summary = `Detective 24/7 Travel Timeline Analysis:\nTotal Monitored Stops: ${stops.length}\n`;
 
       if (highFreq.length > 0) {
-        summary += `\n🚨 FREQUENT PATTERN ALERT (Visited 14+ Times - Marked in CRIMSON):\n`;
+        summary += `\n🚨 HIGH FREQUENCY ALERT (Visited 14+ Times - Marked in CRIMSON):\n`;
         highFreq.forEach((s) => {
-          summary += `• ${s.name} (${s.address}): Visited ${s.visitCount} times! Last dwell duration: ${s.dwellDuration}. (Marked as Priority Location)\n`;
+          summary += `• ${s.name} (${s.address}): Visited ${s.visitCount} times! Last dwell duration: ${s.dwellDuration}.\n`;
         });
       }
 
-      summary += `\nRecent Recorded Stops & Time Spent:\n`;
+      summary += `\nRecent Stops & Dwell Durations:\n`;
       stops.slice(0, 5).forEach((s, idx) => {
-        summary += `${idx + 1}. [${s.name}] - ${s.address}\n   Arrived: ${
-          s.arrivalTime
-        } | Duration Stopped: ${s.dwellDuration} | Total Visits: ${
-          s.visitCount
-        }\n`;
+        summary += `${idx + 1}. [${s.name}] - ${s.address}\n   Arrived: ${s.arrivalTime} | Dwell Time: ${s.dwellDuration} | Total Visits: ${s.visitCount}\n`;
       });
 
       return {
@@ -376,7 +407,7 @@ The 3D map camera is now focused on the live GPS beacon.`,
   // Tool 6: Real-time Weather Query
   server.tool(
     'get_weather_forecast',
-    'Fetch real-time weather data for the current map view or target city, including temperature, conditions, wind speed, and precipitation risk.',
+    'Fetch real-time weather data for current map view or target city, including temperature, conditions, wind speed, and precipitation risk.',
     {},
     async () => {
       const weather = await fullCallbacks.getCurrentWeather();
@@ -399,12 +430,12 @@ The 3D map camera is now focused on the live GPS beacon.`,
   // Tool 7: Show Saved Location
   server.tool(
     'show_saved_location',
-    'Locate and display a user-saved location such as Home, Business platform, Land plot, or Agricultural land on the 3D map.',
+    'Locate and display a user-saved location such as Home, Business platform, Land plot, Agricultural land, Warehouse, Hospital, or Commercial property on the 3D map.',
     {
       query: z
         .string()
         .describe(
-          'Keyword, category, or name of the saved place, e.g. "home", "farm", "agricultural land", "business platform"',
+          'Keyword or name of the saved place, e.g. "home", "farm", "warehouse", "land plot", "clinic"',
         ),
     },
     async ({query}) => {
@@ -414,21 +445,7 @@ The 3D map camera is now focused on the live GPS beacon.`,
       const match = places.find((p) => {
         const nameMatch = p.name.toLowerCase().includes(q);
         const catMatch = p.category.toLowerCase().includes(q);
-        const isAgro =
-          (q.includes('agri') || q.includes('farm') || q.includes('crop')) &&
-          p.category === 'agriculture';
-        const isLand =
-          (q.includes('land') || q.includes('plot')) &&
-          (p.category === 'land' || p.category === 'agriculture');
-        const isBiz =
-          (q.includes('business') ||
-            q.includes('office') ||
-            q.includes('platform')) &&
-          p.category === 'business';
-        const isHome =
-          (q.includes('home') || q.includes('house')) && p.category === 'home';
-
-        return nameMatch || catMatch || isAgro || isLand || isBiz || isHome;
+        return nameMatch || catMatch;
       });
 
       if (match) {
@@ -446,9 +463,7 @@ The 3D map camera is now focused on the live GPS beacon.`,
               text: `Located saved place: "${match.name}"
 Category: ${match.category.toUpperCase()}
 Address: ${match.address}
-${match.landSize ? `Land/Plot Area: ${match.landSize}\n` : ''}${
-                match.notes ? `Details: ${match.notes}\n` : ''
-              }The 3D map is now focused on your ${match.category} location.`,
+${match.landmark ? `Landmark: ${match.landmark}\n` : ''}${match.landSize ? `Plot Area: ${match.landSize}\n` : ''}${match.notes ? `Details: ${match.notes}\n` : ''}The 3D map is now focused on your ${match.category} location.`,
             },
           ],
         };
@@ -458,7 +473,7 @@ ${match.landSize ? `Land/Plot Area: ${match.landSize}\n` : ''}${
         content: [
           {
             type: 'text',
-            text: `Could not find a saved location matching "${query}". You can ask me to save a new place or list your saved locations.`,
+            text: `Could not find a saved location matching "${query}". You can click anywhere on the map to save a new place or ask me to save it.`,
           },
         ],
       };
@@ -468,19 +483,32 @@ ${match.landSize ? `Land/Plot Area: ${match.landSize}\n` : ''}${
   // Tool 8: Save Location
   server.tool(
     'save_location',
-    'Save a new location with categories: home, business, land, agriculture, or other.',
+    'Save a new location with categories: agriculture, home, business, land, warehouse, healthcare, commercial, plantation, civic, or other.',
     {
       name: z.string().describe('Name of the place'),
-      category: z.enum(['home', 'business', 'land', 'agriculture', 'other']),
+      category: z.enum([
+        'agriculture',
+        'home',
+        'business',
+        'land',
+        'warehouse',
+        'healthcare',
+        'commercial',
+        'plantation',
+        'civic',
+        'other',
+      ]),
       address: z.string().describe('Address or location query'),
-      landSize: z.string().optional().describe('Plot size, e.g. "20 Acres"'),
-      notes: z.string().optional().describe('Property details or crops grown'),
+      landmark: z.string().optional().describe('Nearby landmark or street intersection'),
+      landSize: z.string().optional().describe('Plot size, e.g. "20 Acres", "5,000 sq ft"'),
+      notes: z.string().optional().describe('Property details, facility description, or crops'),
     },
-    async ({name, category, address, landSize, notes}) => {
+    async ({name, category, address, landmark, landSize, notes}) => {
       const newPlace = await fullCallbacks.savePlace({
         name,
         category,
         address,
+        landmark,
         landSize,
         notes,
       });
@@ -500,9 +528,7 @@ ${match.landSize ? `Land/Plot Area: ${match.landSize}\n` : ''}${
 • Name: ${name}
 • Category: ${category.toUpperCase()}
 • Address: ${address}
-${landSize ? `• Land Size: ${landSize}\n` : ''}${
-              notes ? `• Details: ${notes}\n` : ''
-            }Added to your Saved Places and displayed on the 3D map.`,
+${landmark ? `• Landmark: ${landmark}\n` : ''}${landSize ? `• Land Size: ${landSize}\n` : ''}${notes ? `• Details: ${notes}\n` : ''}Added to your Saved Places and displayed on the 3D map.`,
           },
         ],
       };
@@ -510,9 +536,7 @@ ${landSize ? `• Land Size: ${landSize}\n` : ''}${
   );
 
   await server.connect(transport);
-  console.log(
-    'MCP Maps server running with Vehicle Clearance, 24/7 Tracking, Detective Timeline, Weather HUD & Voice tools',
-  );
+  console.log('Travel Expert MCP server running');
   while (true) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }

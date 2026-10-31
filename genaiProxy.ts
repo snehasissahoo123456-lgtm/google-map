@@ -205,3 +205,57 @@ export class GoogleGenAI {
     create: (params: any) => new ProxiedChat(params),
   };
 }
+
+export function mcpToTool(...clients: any[]) {
+  return {
+    async tool() {
+      const functionDeclarations: any[] = [];
+      for (const client of clients) {
+        if (!client || typeof client.listTools !== 'function') continue;
+        try {
+          const toolsRes = await client.listTools();
+          for (const tool of toolsRes.tools || []) {
+            functionDeclarations.push({
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+            });
+          }
+        } catch (e) {
+          console.warn('Error listing MCP tools:', e);
+        }
+      }
+      return {functionDeclarations};
+    },
+    async callTool(functionCalls: any[]) {
+      const responses: any[] = [];
+      for (const call of functionCalls) {
+        for (const client of clients) {
+          if (!client || typeof client.callTool !== 'function') continue;
+          try {
+            const res = await client.callTool({
+              name: call.name,
+              arguments: call.args,
+            });
+            responses.push({
+              functionResponse: {
+                name: call.name,
+                response: res.isError ? {error: res} : res,
+              },
+            });
+            break;
+          } catch (e: any) {
+            responses.push({
+              functionResponse: {
+                name: call.name,
+                response: {error: e.message || String(e)},
+              },
+            });
+            break;
+          }
+        }
+      }
+      return responses;
+    },
+  };
+}

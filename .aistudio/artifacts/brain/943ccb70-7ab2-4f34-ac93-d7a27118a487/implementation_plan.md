@@ -1,24 +1,33 @@
-# 24/7 GPS Tracking, Detective Timeline, Heavy Vehicle Routing & Continuous Voice Agent
+# India-First Travel Expert 3D Map Platform (Odia, Hindi & English)
 
-A unified intelligence and navigation system combining live GPS location tracking, pairing-code parental and detective observation, 24/7 travel timelines with stop-duration profiling, frequent-location color marking, vehicle-specific road restriction routing (scooters to 16-wheelers), hands-free continuous voice commands, and a real-time weather HUD overlay.
+An India-centered navigation, GPS intelligence, and property registry platform featuring default All-India 3D map coordinates, a default Indian (+91) phone OTP authentication gateway with international picker, multilingual conversational AI fluently speaking and understanding **Odia (ଓଡ଼ିଆ)**, **Hindi (हिन्दी)**, and **English**, and Indian national highway/state corridor emergency service integration.
 
 ### User Review & Critical Decisions
 
 > [!IMPORTANT]
 > The following critical product and technical decisions have been confirmed during the interactive interview:
 
-- **Confirmed Decision 1 (Vehicle Spectrum)**: Full-spectrum vehicle classification enabled — Scooter/Bike (2-wheeler), Car/Van (4-wheeler), Medium Truck (6-wheeler), Heavy Commercial (8-wheeler), and Freight Semi-Trailer (16-wheeler), each with distinct physical dimensions, axle weights, turning radiuses, bridge height clearances, and tight street/alleyway jam restrictions.
-- **Confirmed Decision 2 (Device Tracking & Timeline)**: Live browser Geolocation API paired with unique 6-character private access codes (e.g. `TRK-8821`), a 24/7 activity timeline recording dwell times and stop addresses, frequency analysis (color-coding destinations visited 10–15+ times in detective amber and red), and an interactive GPS playback simulator for live route demonstration.
-- **Confirmed Decision 3 (Voice Conversation)**: Continuous verbal conversation loop with automatic speech recognition restart, interruption handling, and spoken AI responses.
-- **Confirmed Decision 4 (Weather Overlay)**: Integrated HUD toggle button fetching real-time temperature, condition, precipitation risk, and wind speed for the active map camera center using open meteorological weather data (Open-Meteo API).
+- **Confirmed Decision 1 (All-India Default Map View)**: The 3D map initializes centered over the Indian subcontinent (`20.5937° N, 78.9629° E`), highlighting Odisha (Bhubaneswar/Cuttack/Puri) and Delhi-NCR key corridors with Indian geographic orientation.
+- **Confirmed Decision 2 (Default +91 India Phone OTP Gate)**: The sign-in gate defaults to `+91 (India)` phone numbers (e.g. `+91 98765 43210`), formatted with Indian telecom standards while retaining a country selector dropdown (`+91 India`, `+1 USA`, `+44 UK`, `+971 UAE`, `+65 Singapore`, etc.) for international visitors.
+- **Confirmed Decision 3 (Trilingual Speech Engine: Odia, Hindi & English)**:
+  - The voice agent detects spoken language automatically from microphone audio.
+  - If the user speaks in **Odia** (e.g., *"ମୋ କୃଷି ଜମିକୁ ବାଟ ଦେଖାଅ"* or *"ଭୁବନେଶ୍ୱରରୁ ପୁରୀ ରାସ୍ତାରେ ଟ୍ରାଫିକ କେମିତି ଅଛି?"*), the agent processes the query and speaks back in fluent Odia.
+  - If the user speaks in **Hindi** (e.g., *"मेरी ज़मीन दिखाओ"* or *"दिल्ली से आगरा 16-टायर ट्रक के लिए कौन सा रास्ता सही है?"*), the agent responds in clear Hindi.
+  - If the user speaks in **English** (e.g., *"Navigate from Delhi to Bhubaneswar with truck clearance"*), the agent responds in Indian English.
+  - Speech synthesis selects appropriate regional voice tags (`or-IN`, `hi-IN`, `en-IN`).
+- **Confirmed Decision 4 (Indian Property & Registry Seed Data)**:
+  - Farmland / Agriculture: Organic Farmland, Cuttack Coastal Plain, Odisha (35.0 Bighas / 15.0 Acres).
+  - Residence: Greenwood Family Home, Saheed Nagar, Bhubaneswar, Odisha.
+  - Tech Platform: Connaught Place Innovation Hub, New Delhi.
+  - Commercial Land: Outer Ring Road Commercial Plot, Bengaluru, Karnataka.
 
 ---
 
 ### 1. Overview & Core Concept
 
-- **What It Does**: Upgrades the 3D Map application into a comprehensive navigation and detective tracking command suite. Users can speak naturally to the AI agent in continuous verbal mode to navigate anywhere, locate saved plots or properties, inspect real-time weather, and trace live vehicle locations. It introduces a secure Pairing Code system where a secondary device (e.g. parent, logistics supervisor, or authorized tracker) can view 24/7 live position, stopped intervals, traveling zones, and repeated-visit heat markings. Furthermore, the routing engine calculates vehicle-appropriate clearance—proactively alerting drivers if a narrow road, low overpass, or congested street would jam a 6, 8, or 16-wheeler.
-- **Target Audience & Persona**: Commercial fleet operators, family guardians/parents tracking loved ones, private investigators/detectives monitoring travel routines, and everyday travelers requiring real-time smart routing.
-- **Key Value**: Replaces generic point-to-point maps with intelligent vehicle-aware routing, automated detective timeline forensics, continuous speech control, and live weather conditions.
+- **What It Does**: Provides an India-first geospatial navigation command center designed specifically for Indian users, drivers, property owners, and logistics operators. The map launches automatically onto the Indian subcontinent. Users authenticate via a pre-filled Indian (+91) mobile OTP verification screen. The **Travel Expert** co-pilot interacts seamlessly in Odia, Hindi, and English—automatically adjusting its speech synthesis and language model output to whichever language the user speaks.
+- **Target Audience / Persona**: Indian vehicle drivers (from 2-wheeler scooters to 16-wheeler heavy freight trucks on National Highways), agricultural land owners in Odisha and other states, family members monitoring 24/7 live GPS tracking with access codes, and commercial logistics managers.
+- **Key Value**: Native regional language comprehension in Odia and Hindi alongside English, localized Indian telecom onboarding, and Indian National Highway (NH) corridor routing with traffic density and emergency services.
 
 ---
 
@@ -26,119 +35,93 @@ A unified intelligence and navigation system combining live GPS location trackin
 
 #### Key User Flows
 
-1. **Continuous Voice & Detective Consultation Flow**:
-   - The user clicks the Hands-Free Mic toggle in the chat footer or says a voice command.
-   - The speech engine enters continuous listen-and-respond loop.
-   - The user asks: *"I am driving an 8-wheeler truck to the North Harbor. Can I take the downtown bridge route?"*
-   - The Gemini agent invokes vehicle-routing tools, analyzes road clearance, plots the safe truck corridor on the 3D map, highlights the restricted downtown route in dashed hazard red, and speaks: *"Negative: the downtown river bridge has a 12-ton load limit and tight 90-degree corners that will trap an 8-wheeler. I have routed you via the Outer Expressway Bypass (saved 18 minutes)."*
+1. **Indian Mobile OTP Authentication Gate**:
+   - Opens with an Indian flag icon and `+91 (India)` selected by default.
+   - Pre-filled with an Indian test mobile number: `+91 98765 43210`.
+   - International users can toggle the country dropdown to select other codes (`+1`, `+44`, `+971`, etc.).
+   - Clicking *"Send Verification Code (OTP)"* generates a 6-digit code with instant toast confirmation.
+   - Verifying unlocks the All-India 3D map.
 
-2. **24/7 GPS Tracking & Pairing Code Flow**:
-   - In the newly integrated **"Tracking & Detective" tab**, the user clicks **Generate Access Code** (e.g. `TRK-7492`) or enters a code shared by their child or vehicle driver.
-   - Once paired, the map centers on the live GPS beacon with vehicle direction heading, current speed (km/h or mph), and active travel status (Moving vs Stopped).
-   - The user can test live motion via the built-in **Live GPS Route Simulator** to see smooth continuous position updates across city streets.
+2. **Multilingual Voice Co-Pilot (Odia, Hindi & English)**:
+   - When the user taps the mic or runs in Continuous Verbal Mode:
+     - User speaks in Odia: *"ମୋତେ ଭୁବନେଶ୍ୱର ଏୟାରପୋର୍ଟରୁ କଟକ ଯିବାକୁ ବାଟ କୁହ"*
+     - Travel Expert responds in Odia text and speaks aloud in Odia: *"ଭୁବନେଶ୍ୱରରୁ କଟକ ଯିବା ପାଇଁ ଜାତୀୟ ରାଜପଥ ୧୬ (NH 16) ସବୁଠାରୁ ଭଲ ରାସ୍ତା। ସମୟ ପ୍ରାୟ ୪୫ ମିନିଟ ଲାଗିବ।"*
+     - User speaks in Hindi: *"कटक फार्म से दिल्ली तक 16-व्हीलर ट्रक के लिए रास्ता बताओ"*
+     - Travel Expert responds in Hindi with clearance advice: *"16-टायर ट्रक के लिए NH 16 और NH 19 एक्सप्रेसवे कॉरिडोर सबसे सुरक्षित है। भीड़भाड़ वाले शहर के संकरे बाज़ारों में जाने से बचें।"*
+     - User speaks in English: *"What is the traffic and weather in Bhubaneswar right now?"*
+     - Travel Expert reports live weather and route traffic in English.
 
-3. **Detective Timeline & Frequent Visit Heat-Marking**:
-   - The timeline log displays daily travel intervals with precise timestamps, start/stop locations, and dwell durations (e.g., *"Stopped at Industrial Park Plot 4: 2 hrs 15 mins"*).
-   - Points visited repeatedly (>10–15 times) automatically transition in color:
-     - 1–4 visits: Soft Blue
-     - 5–9 visits: Emerald Green
-     - 10–14 visits: Investigative Amber
-     - 15+ visits: High-Frequency Crimson Red with a distinctive detective inspection badge.
+3. **All-India 3D Navigation & National Highway Corridor Tracking**:
+   - Starts centered on India (`20.5937° N, 78.9629° E`).
+   - Quick navigation shortcuts in the sidebar to jump directly between:
+     - **Odisha Hub** (Bhubaneswar, Cuttack, Puri, Paradip Port)
+     - **Delhi-NCR Corridor** (New Delhi, Gurugram, Noida)
+     - **Commercial Hubs** (Mumbai, Bengaluru, Kolkata)
+   - Indian emergency service POIs: AIIMS / District Hospitals, Police Thana / Highway Patrol Posts, Indian Oil / Bharat Petroleum Fuel Pumps.
 
-4. **Weather Overlay HUD**:
-   - The map overlay toolbar features a **⛅ Weather** toggle button.
-   - When active, a clean glassmorphism weather HUD displays local temperature, weather condition icon (Sunny, Rain, Fog, Overcast), wind speed, and visibility for the current map viewport.
-
-#### Visual Identity & Theme
-- **Aesthetic Direction**: High-precision geospatial command center with clean light/dark support, matching the existing Google 3D photorealistic map canvas.
-- **Color Palette & Discipline**:
-  - Dominant Neutral: Deep graphite / clean slate surfaces (`#0f172a`, `#1e293b`) with crisp typography.
-  - Accent Budget:
-    - Navigation Blue (`#2563eb`) for standard automobile routes.
-    - Truck Freight Cyan / Amber (`#0ea5e9` / `#f59e0b`) for commercial corridors.
-    - Hazard Red (`#ef4444`) for clearance warnings and road jams.
-    - Emerald Green (`#10b981`) for safe clearances and active tracking beacons.
-- **Typography**: Clean hierarchy with tabular numerals (`font-mono tabular-nums`) for timestamps, dwell durations, GPS coordinates, vehicle speeds, and temperature readouts.
-- **Zero-Pill Restraint**: Metadata presented as quiet unboxed text with subtle typographic separators (`·` or `/`), avoiding decorative capsule badge clutter.
+4. **Click-on-Map Land Registry with Indian Metrics**:
+   - Clicking any plot in India captures coordinates and fills the registration form with Indian measurements (e.g. Bigha, Guntha, Acre, Square Yards).
 
 ---
 
 ### 3. Key Product Decisions & Trade-Offs
 
-- **Decision 1: Client-Side Vehicle Profile Clearance Matrix**
-  - *Chosen Approach*: Implement a structured vehicle rules engine evaluating route highway tags, narrow urban streets, and elevation constraints against 5 standardized vehicle profiles (2-wheeler, 4-wheeler, 6-wheeler, 8-wheeler, 16-wheeler).
-  - *Why*: Provides instant routing warnings and detour advice while integrating directly with Google Directions API waypoints.
-  - *Alternative Considered*: External third-party commercial trucking APIs which require separate paid licensing and client secrets; the hybrid heuristic engine provides reliable guidance with zero additional secret keys.
-- **Decision 2: Pairing Code & Persistent Local Storage Architecture**
-  - *Chosen Approach*: Store device tracking session, paired codes, timeline logs, and frequent-stop databases in browser storage (`localStorage`), backed by browser Geolocation API and an interactive live simulator.
-  - *Why*: Privacy-preserving peer code exchange that functions reliably without external server databases while allowing instant testing on any client device.
-- **Decision 3: Real-Time Weather Source**
-  - *Chosen Approach*: Integrate Open-Meteo REST API (free, reliable, requires no API key or credit card) based on latitude/longitude of the current 3D map camera center.
-  - *Why*: Zero configuration burden for users, instant global weather coverage, and seamless syncing with 3D map camera movements.
+- **Decision 1: Native Trilingual Voice Prompting in Odia, Hindi & English**
+  - *Chosen Approach*: Configure the Gemini system instructions with explicit linguistic grounding in Odia script (ଓଡ଼ିଆ), Hindi script (हिन्दी), and English, with automatic language mirroring.
+  - *Why*: Eliminates language barriers for users in Odisha and across India while supporting global English commands.
+- **Decision 2: Web Speech Synthesis Adaptation with Regional Fallbacks**
+  - *Chosen Approach*: Detect language script (`[\u0B00-\u0B7F]` for Odia, `[\u0900-\u097F]` for Hindi) and route to `hi-IN` or Indian English `en-IN` speech synthesizers when native browser Odia voice packs are unavailable on certain platforms.
+  - *Why*: Ensures crisp, accent-appropriate audio playback across Android, Chrome, and Windows devices.
+- **Decision 3: Default Indian Geolocation with Global Selector**
+  - *Chosen Approach*: Default all coordinates and phone inputs to India while keeping an accessible international country selector.
+  - *Why*: Perfectly aligns with the user's primary target demographic without alienating international visitors.
 
 ---
 
 ### 4. Technical Architecture & Data Strategy
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                            MapApp Lit Component                             │
-│                                                                              │
-│  ┌──────────────────────┐  ┌──────────────────────────────────────────────┐  │
-│  │   Top HUD Toolbar    │  │            Google Photorealistic 3D          │  │
-│  │ [⛅ Weather]         │  │                 Map Canvas                   │  │
-│  │ [📍 Save Location]   │  │  - 3D Route Polyline (Vehicle Aware)         │  │
-│  │ [🎙 Voice Agent: ON] │  │  - GPS Live Vehicle Marker & Direction Cone  │  │
-│  │ [🚚 Vehicle Selector]│  │  - Frequent Stop Heat Markers (Color Coded)  │  │
-│  └──────────┬───────────┘  └──────────────────────┬───────────────────────┘  │
-│             │                                     │                          │
-│             ▼                                     ▼                          │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                    Sidebar Multiplexed Tab Panels                      │  │
-│  │                                                                        │  │
-│  │  ┌──────────────────┐  ┌─────────────────┐  ┌───────────────────────┐  │  │
-│  │  │   Gemini Agent   │  │    My Places    │  │  GPS Tracking & Crime │  │  │
-│  │  │ (Continuous Mic) │  │  (Agro/Land/Biz)│  │   Timeline Detective  │  │  │
-│  │  └────────┬─────────┘  └─────────────────┘  └───────────┬───────────┘  │  │
-└──────────────┼─────────────────────────────────────────────┼─────────────────┘
-               │                                             │
-               ▼                                             ▼
-┌───────────────────────────────┐             ┌────────────────────────────────┐
-│   MCP Server (Map & Agent)    │             │   Tracking & Vehicle Engine    │
-│  - view_location_google_maps  │             │  - Pairing Code Management     │
-│  - directions_with_vehicle    │             │  - 24/7 Dwell Time Logger      │
-│  - get_route_navigation_info  │             │  - Visit Frequency Heat-Map    │
-│  - check_vehicle_clearance    │             │  - Vehicle Clearance Matrix    │
-│  - get_weather_forecast       │             │  - Live GPS & Route Simulator  │
-│  - query_tracking_timeline    │             │  - Open-Meteo Weather Fetcher  │
-└───────────────────────────────┘             └────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 India-First Travel Expert Architecture                      │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │               Indian Authentication Gateway (+91 Default)             │  │
+│  │   - Country Select: 🇮🇳 +91 (Default) | 🇺🇸 +1 | 🇬🇧 +44 | 🇦🇪 +971       │  │
+│  │   - 6-digit Indian SMS OTP simulation with persistent session         │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+│                                      │                                      │
+│                                      ▼                                      │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                      All-India 3D Map Viewport                        │  │
+│  │  - Initial Coordinates: 20.5937° N, 78.9629° E (India Center)         │  │
+│  │  - Regional Quick-Focus: Odisha (Bhubaneswar), Delhi-NCR, Mumbai      │  │
+│  │  - National Highway Traffic (NH 16, NH 44, NH 19)                     │  │
+│  │  - Indian Emergency POIs: AIIMS/Hospitals, Police Thana, Fuel Pumps   │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+│                                      │                                      │
+│                                      ▼                                      │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │             Trilingual Speech & Travel Expert AI Engine               │  │
+│  │                                                                       │  │
+│  │   🗣️ Odia (ଓଡ଼ିଆ)        🗣️ Hindi (हिन्दी)       🗣️ English (India)      │  │
+│  │                                                                       │  │
+│  │   - Automatic script detection from query text & speech input         │  │
+│  │   - Odia & Hindi voice synthesis (hi-IN / en-IN with fallback)        │  │
+│  │   - Verbal continuous loop with trilingual command recognition        │  │
+│  └───────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### Core Data Entities
+#### Seed Data Entities (Indian Context)
 
-1. **`VehicleProfile`**:
-   - `id`: `'scooter' | 'car' | 'truck_6w' | 'heavy_8w' | 'semi_16w'`
-   - `label`: Display name (e.g. "16-Wheeler Freight Semi")
-   - `lengthMeters`, `heightMeters`, `weightTons`, `axles`
-   - `restrictedRoadTypes`: Array of road classifications where the vehicle is prohibited or risk-prone (e.g. alleys, residential streets, bridges under 14ft).
+1. **`SavedPlace` (India)**:
+   - `id: 'place_agro_odisha'`: "Maa Tarini Organic Farmland", Cuttack-Puri Coastal Belt, Odisha (Category: `agriculture`, Size: `25.0 Bighas / 10.5 Acres`).
+   - `id: 'place_home_bbsr'`: "Niladri Vihar Residence", Chandrasekharpur, Bhubaneswar, Odisha (Category: `home`).
+   - `id: 'place_biz_delhi'`: "Connaught Circus Commercial Platform", New Delhi (Category: `business`).
+   - `id: 'place_wh_paradip'`: "Paradip Port Logistics Yard & Godown", Jagatsinghpur, Odisha (Category: `warehouse`).
 
-2. **`TrackingSession` & `TimelineStop`**:
-   - `deviceId`, `pairingCode`: 6-character access token
-   - `liveLocation`: `{ lat, lng, speed, heading, altitude, lastUpdated }`
-   - `stops`: Array of `{ id, address, lat, lng, arrivalTime, departureTime, dwellMinutes, visitCount }`
-   - `frequentZones`: Array of locations visited $>10$ or $>14$ times, mapped to color tiers:
-     - Normal (`#3b82f6`), Frequent (`#f59e0b`), High-Risk / Detective Alert (`#ef4444`).
-
-3. **`WeatherInfo`**:
-   - `temperature`: Current celsius/fahrenheit value
-   - `weatherCode`, `conditionText`: e.g. "Partly Cloudy", "Rain Shower"
-   - `windSpeed`: km/h or mph
-   - `isDay`: Boolean for night/day sun icons
-   - `lastFetched`: Timestamp
-
-#### Interactive Component & State Mapping
-
-- **Continuous Voice Conversation**: An active loop that, once toggled on, immediately restarts the Web Speech `SpeechRecognition` listener upon candidate execution and speaking completion, allowing hands-free command dialogues without re-clicking.
-- **Vehicle Selection Bar**: Integrated into the navigation setup and route calculation; switching to an 8-wheeler or 16-wheeler triggers clearance validation with road warnings in the route HUD and chat output.
-- **Detective Timeline UI**: An interactive timeline stream showing stopped periods with duration badges (e.g. `2h 45m`) and a "Mark Frequency" action button to highlight recurring travel patterns on the 3D map.
-- **Weather HUD Overlay**: Positioned gracefully under the top toolbar with a live refresh button and automated location updates whenever camera coordinates shift.
+2. **`EmergencyPOI` (India)**:
+   - 🏥 AIIMS Bhubaneswar / Apollo Specialty Hospital
+   - 🚓 Commissionerate Police Station / Highway Patrol Unit
+   - ⛽ Indian Oil 24/7 Swagat Fuel Station
+   - 🩺 Care Emergency Trauma & Diagnostic Clinic
